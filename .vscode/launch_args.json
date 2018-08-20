@@ -1,0 +1,6 @@
+{
+	"args": [
+		"./test/20180626141943_box_toothpaste_long.pcd ./model_pcd/box_toothpaste_long_model.pcd",
+		"test/20180626141943_box_toothpaste_long.pcd model_pcd/box_toothpaste_long_model.pcd"
+	]
+}

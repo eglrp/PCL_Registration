@@ -1,0 +1,14 @@
+
+#ignore folders
+/build
+/devel
+/model_pcd
+/test
+/src/orbbec_camera
+
+#ignore files
+.catkin_workspace
+.ycm_extra_conf.py
+.ycm_extra_conf.pyc
+*.cam
+/src/CMakeLists.txt
