@@ -468,7 +468,7 @@ double camera_cy = 253.73;
 double camera_fx = 573.293;
 double camera_fy = 572.41;
 
-void MaskRCNNCB()
+void Alignment()
 {
   //利用深度图和mask分割场景中物体点云 
   // cv::imshow("test image", cv_ptr->image);
@@ -525,6 +525,18 @@ void MaskRCNNCB()
   //pairAlign (CloudMask, CloudModel, temp0, pairTransform0, true);
 }
 
+
+bool bMaskRCNNMsg = true;
+
+void MaskRCNNCB()
+{
+  if(false == bMaskRCNNMsg)
+  {
+      bMaskRCNNMsg = true;
+      //depth_sub
+  }
+}
+
 //depth图显示的回调函数    
 void depthCb(const sensor_msgs::ImageConstPtr& msg)
 {
@@ -544,17 +556,20 @@ void depthCb(const sensor_msgs::ImageConstPtr& msg)
   cv::imshow("depth image", cv_ptr->image);
   cv::waitKey(3);
 
-  //独立测试
-  cv::waitKey(100);
-  MaskRCNNCB();
-  depth_sub.shutdown();
+  if(true == bMaskRCNNMsg)
+  {
+    depth_sub.shutdown();
+    cv::waitKey(100);
+    Alignment();
+    bMaskRCNNMsg = false;  
+  }
 }
 
 //****************  入口函数  ************************
 int main (int argc, char** argv)
 {
   // Initialize ROS
-  ros::init (argc, argv, "pcl_test");
+  ros::init (argc, argv, "pcl_registration");
   ros::NodeHandle nh;
   sensor_msgs::PointCloud2 output;
   ros::Publisher pcl_pub = nh.advertise<sensor_msgs::PointCloud2> ("pcl_output", 1);//发布到主题（topic）
@@ -563,6 +578,8 @@ int main (int argc, char** argv)
   p = new pcl::visualization::PCLVisualizer (argc, argv, "Pairwise Incremental Registration example"); //p是全局变量
   p->createViewPort (0.0, 0, 0.5, 1.0, vp_1); //创建左视区
   p->createViewPort (0.5, 0, 1.0, 1.0, vp_2); //创建右视区
+
+  cv::namedWindow("depth image");
 
   //创建点云指针和变换矩阵
   PointCloud::Ptr result (new PointCloud), source, pretarget(new PointCloud), target; //创建3个点云指针，分别用于结果，源点云和目标点云
@@ -573,12 +590,13 @@ int main (int argc, char** argv)
     //ROS下与其他节点共同集成测试
 
     //订阅深度图
-    cv::namedWindow("depth image");
     depth_sub = nh.subscribe("/camera/depth/image", 1 , depthCb); 
-    cv::destroyWindow("depth image"); 
+    
     
     //订阅mask-RCNN发布消息
     //MaskRCNN_sub = nh.subscribe("maskRCNN",1,MaskRCNNCB); 
+
+    //cv::destroyWindow("depth image"); 
   }
   
   else 
