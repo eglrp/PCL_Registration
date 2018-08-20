@@ -1,9 +1,11 @@
 
-/**************************************************/
-//first version
-
-
-/**************************************************/
+/**************************************************
+Copyright(c) 2018-2018 fellen All rights reserved. 
+Author: fellen
+Date:2018-08-20 
+Description:1¡¢Compute starting translation and rotation based on MomentOfInertiaEstimation descriptor
+            2¡¢LM-ICP Alignment                                                                                                                                          
+**************************************************/
 
 //ROSÍ·ÎÄ¼þ
 #include <ros/ros.h>
@@ -31,15 +33,13 @@
 #include <pcl/registration/transforms.h>
 //¿ÉÊÓ»¯
 #include <pcl/visualization/pcl_visualizer.h>
-
-
+//opencv2
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
-
+//image transport
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
-
 
 //ÃüÃû¿Õ¼ä
 using pcl::visualization::PointCloudColorHandlerGenericField;
@@ -84,7 +84,6 @@ class MyPointRepresentation : public pcl::PointRepresentation <PointNormalT> //¼
     //Ö¸¶¨Î¬Êý
     nr_dimensions_ = 4;
   }
-
   //ÖØÔØº¯ÊýcopyToFloatArray£¬ÒÔ¶¨Òå×Ô¼ºµÄÌØÕ÷ÏòÁ¿
   virtual void copyToFloatArray (const PointNormalT &p, float * out) const
   {
@@ -158,7 +157,6 @@ void loadData (int argc, char **argv, std::vector<PCD, Eigen::aligned_allocator<
 
 void prePairAlign(const PointCloud::Ptr cloud_src,const PointCloud::Ptr cloud_tgt, PointCloud::Ptr transformed_cloud,  bool downsample)
 {
-
   PointCloud::Ptr src (new PointCloud); //´´½¨µãÔÆÖ¸Õë
   PointCloud::Ptr tgt (new PointCloud);
   pcl::VoxelGrid<PointT> grid; //VoxelGrid °ÑÒ»¸ö¸ø¶¨µÄµãÔÆ£¬¾Û¼¯ÔÚÒ»¸ö¾Ö²¿µÄ3DÍø¸ñÉÏ,²¢ÏÂ²ÉÑùºÍÂË²¨µãÔÆÊý¾Ý
@@ -177,7 +175,6 @@ void prePairAlign(const PointCloud::Ptr cloud_src,const PointCloud::Ptr cloud_tg
     src = cloud_src; //Ö±½Ó¸´ÖÆ
     tgt = cloud_tgt;
   }
-
   //******************************OBB°üÎ§ºÐ¼ÆËã*************************************//
 	pcl::MomentOfInertiaEstimation <pcl::PointXYZ> feature_extractor;
 	feature_extractor.setInputCloud(src);
@@ -209,7 +206,6 @@ void prePairAlign(const PointCloud::Ptr cloud_src,const PointCloud::Ptr cloud_tg
 	 p->addCoordinateSystem(0.2);
 	// p->initCameraParameters();
  
-
 	p->addPointCloud<pcl::PointXYZ>(cloud_src, "prePairAlign source");
   p->addPointCloud<pcl::PointXYZ>(cloud_tgt, "prePairAlign target");
 	//p->addCube(min_point_AABB.x, max_point_AABB.x, min_point_AABB.y, max_point_AABB.y, min_point_AABB.z, max_point_AABB.z, 1.0, 1.0, 0.0, "AABB");
@@ -266,7 +262,6 @@ void prePairAlign(const PointCloud::Ptr cloud_src,const PointCloud::Ptr cloud_tg
 	p->addLine(pt3, pt4, 1.0, 0.0, 0.0, "11 edge");
 	p->addLine(pt3, pt7, 1.0, 0.0, 0.0, "12 edge");
 
-
 	//************************************¼ÆËãÐý×ª¾ØÕó***********************************//
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in(new pcl::PointCloud<pcl::PointXYZ>());
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out(new pcl::PointCloud<pcl::PointXYZ>());
@@ -315,8 +310,6 @@ void prePairAlign(const PointCloud::Ptr cloud_src,const PointCloud::Ptr cloud_tg
 	cloud_out->points[3].y = z_axis.y;
 	cloud_out->points[3].z = z_axis.z;
 
-
-
 	//ÀûÓÃSVD·½·¨Çó½â±ä»»¾ØÕó  
 	pcl::registration::TransformationEstimationSVD<pcl::PointXYZ, pcl::PointXYZ> TESVD;
 	pcl::registration::TransformationEstimationSVD<pcl::PointXYZ, pcl::PointXYZ>::Matrix4 transformation2;
@@ -330,13 +323,11 @@ void prePairAlign(const PointCloud::Ptr cloud_src,const PointCloud::Ptr cloud_tg
 	printf("\n");
 	printf("t = < %0.3f, %0.3f, %0.3f >\n", transformation2(0, 3), transformation2(1, 3), transformation2(2, 3));
 
-
 	// Executing the transformation
 	//pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZ>());
 	// You can either apply transform_1 or transform_2; they are the same
   //	pcl::transformPointCloud(*cloud_src, *transformed_cloud, transformation2);
   pcl::transformPointCloud(*cloud_tgt, *transformed_cloud, transformation2);
-
   //	pcl::io::savePCDFileASCII("transformed_cloud.pcd", *transformed_cloud);	
 }
 
@@ -526,14 +517,12 @@ void MaskRCNNCB()
             << std::endl;
 
  showCloudsLeft(CloudMask, CloudModel); //ÔÚ×óÊÓÇø£¬¼òµ¥µÄÏÔÊ¾Ô´µãÔÆºÍÄ¿±êµãÔÆ
- 
-          
+         
   //Åä×¼ÎïÌåÄ£ÐÍºÍ³¡¾°ÖÐÎïÌåµãÔÆ
   prePairAlign(CloudMask,CloudModel,CloudPreProcess,true);
   p->spin();
   pairAlign (CloudMask, CloudPreProcess, temp0, pairTransform0, true);
-
-   // pairAlign (CloudMask, CloudModel, temp0, pairTransform0, true);
+  //pairAlign (CloudMask, CloudModel, temp0, pairTransform0, true);
 }
 
 //depthÍ¼ÏÔÊ¾µÄ»Øµ÷º¯Êý    
