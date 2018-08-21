@@ -41,6 +41,10 @@ Description:1、Compute starting translation and rotation based on MomentOfInerti
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
 
+#include <pcl/common/time.h>
+
+#include <string>
+
 //命名空间
 using pcl::visualization::PointCloudColorHandlerGenericField;
 using pcl::visualization::PointCloudColorHandlerCustom;
@@ -64,6 +68,7 @@ int vp_1, vp_2;
 cv_bridge::CvImagePtr cv_ptr;
 //调试标志
 bool DEBUG_WITH_OTHERS = true;
+bool DEBUG_VISUALIZER = false;
 
 //定义结构体，用于处理点云
 struct PCD
@@ -169,6 +174,9 @@ void prePairAlign(const PointCloud::Ptr cloud_src,const PointCloud::Ptr cloud_tg
         //下采样 目标点云
     grid.setInputCloud (cloud_tgt);
     grid.filter (*tgt);
+
+    PCL_INFO ("Partial Pointcloud size after sampling is. %d.\n", src->size());
+    PCL_INFO ("Model Pointcloud size after sampling is. %d.\n", tgt->size());
   }
   else //不下采样
   {
@@ -339,14 +347,13 @@ void prePairAlign(const PointCloud::Ptr cloud_src,const PointCloud::Ptr cloud_tg
 //参数downsample 是否下采样
 void pairAlign (const PointCloud::Ptr cloud_src, const PointCloud::Ptr cloud_tgt, PointCloud::Ptr output, Eigen::Matrix4f &final_transform, bool downsample = false)
 {
-  //
   //为了一致性和速度，下采样
-  // \note enable this for large datasets
   PointCloud::Ptr src (new PointCloud); //创建点云指针
   PointCloud::Ptr tgt (new PointCloud);
   pcl::VoxelGrid<PointT> grid; //VoxelGrid 把一个给定的点云，聚集在一个局部的3D网格上,并下采样和滤波点云数据
   if (downsample) //下采样
   {
+    pcl::ScopeTime scope_time("downsample"); 
     grid.setLeafSize (0.005, 0.005, 0.005); //设置体元网格的叶子大小
         //下采样 源点云
     grid.setInputCloud (cloud_src); //设置输入点云
@@ -399,6 +406,7 @@ void pairAlign (const PointCloud::Ptr cloud_src, const PointCloud::Ptr cloud_tgt
 
   for (int i = 0; i < 100; ++i) //迭代
   {
+    //pcl::ScopeTime scope_time("ICP Iteration"); 
     PCL_INFO ("Iteration Nr. %d.\n", i); //命令行显示迭代的次数
     //保存点云，用于可视化
     points_with_normals_src = reg_result; //
@@ -413,7 +421,10 @@ void pairAlign (const PointCloud::Ptr cloud_src, const PointCloud::Ptr cloud_tgt
        break;
     prev = reg.getLastIncrementalTransformation (); //上一次变换的误差
     //显示当前配准状态，在窗口的右视区，简单的显示源点云和目标点云
-    showCloudsRight(points_with_normals_tgt, points_with_normals_src);
+    if(true == DEBUG_VISUALIZER)
+    {
+      showCloudsRight(points_with_normals_tgt, points_with_normals_src);    
+    }
   }
 
   targetToSource = Ti.inverse(); //计算从目标点云到源点云的变换矩阵
@@ -426,19 +437,23 @@ void pairAlign (const PointCloud::Ptr cloud_src, const PointCloud::Ptr cloud_tgt
   p->addPointCloud (output, cloud_tgt_h, "target", vp_2); //添加点云数据，下同
   p->addPointCloud (cloud_src, cloud_src_h, "source", vp_2);
 
-  PCL_INFO ("Press q to continue the registration.\n");
-  p->spin ();
+  if(false == DEBUG_WITH_OTHERS)
+  {
+    PCL_INFO ("Press q to continue the registration.\n");
+    p->spin ();
 
-  p->removePointCloud ("source"); 
-  p->removePointCloud ("target");
+    p->removePointCloud ("source"); 
+    p->removePointCloud ("target");
 
-  p->removePointCloud ("prePairAlign source"); //根据给定的ID，从屏幕中去除一个点云。参数是ID
-  p->removePointCloud ("prePairAlign target"); //根据给定的ID，从屏幕中去除一个点云。参数是ID
-  p->removeAllShapes();
-  //add the source to the transformed target
-  *output += *cloud_src; // 拼接点云图（的点）点数数目是两个点云的点数和
+    p->removePointCloud ("prePairAlign source"); //根据给定的ID，从屏幕中去除一个点云。参数是ID
+    p->removePointCloud ("prePairAlign target"); //根据给定的ID，从屏幕中去除一个点云。参数是ID
+    p->removeAllShapes();
+    //add the source to the transformed target
+    *output += *cloud_src; // 拼接点云图（的点）点数数目是两个点云的点数和
 
-  final_transform = targetToSource; //最终的变换。目标点云到源点云的变换矩阵
+    final_transform = targetToSource; //最终的变换。目标点云到源点云的变换矩阵
+  }
+ 
 }
 
 //订阅点云及可视化
@@ -500,29 +515,33 @@ void Alignment()
   p->spin();
  
   //根据label提取物体模型
-  //  std::vector<PCD, Eigen::aligned_allocator<PCD> > data0; //模型
-  // char* strPath = "../model_pcd/bottle_milktea_model.pcd";//*******************有问题！！！！！
-  // loadData (1, &strPath, data0); //读取pcd文件数据，定义见上面
-  // CloudModel = data0[0].cloud;
-
- //打开点云文件
-  if (pcl::io::loadPCDFile<pcl::PointXYZ> ("./model_pcd/bottle_milktea_model.pcd", *CloudModel) == -1) 
+  std::string lable = "bottle_milktea";
+  std::string ModelPath = "./model_pcd/";
+  ModelPath = ModelPath + lable + "_model.pcd";
+  if (pcl::io::loadPCDFile<pcl::PointXYZ> (ModelPath, *CloudModel) == -1) 
   {
-    PCL_ERROR ("Couldn't read file test_pcd.pcd \n");
+    PCL_ERROR ("Couldn't read file bottle_milktea_model.pcd \n");
     return;
-  }
+  }    
   std::cout << "Loaded "
-            << CloudModel->width * CloudModel->height
-            << " data points from Model"
-            << std::endl;
-
+                << CloudModel->width * CloudModel->height
+                << " data points from Model"
+                << std::endl;
  showCloudsLeft(CloudMask, CloudModel); //在左视区，简单的显示源点云和目标点云
          
   //配准物体模型和场景中物体点云
-  prePairAlign(CloudMask,CloudModel,CloudPreProcess,true);
+  {
+    pcl::ScopeTime scope_time("PrePairAlign");//计算算法运行时间
+    prePairAlign(CloudMask,CloudModel,CloudPreProcess,true);
+  }
+  PCL_INFO ("Press q to continue.\n");
   p->spin();
-  pairAlign (CloudMask, CloudPreProcess, temp0, pairTransform0, true);
-  //pairAlign (CloudMask, CloudModel, temp0, pairTransform0, true);
+  {
+    pcl::ScopeTime scope_time("PairAlign");//计算算法运行时间
+    pairAlign (CloudMask, CloudPreProcess, temp0, pairTransform0, true);
+  }
+  PCL_INFO ("Press q to continue.\n");
+  p->spin();
 }
 
 
