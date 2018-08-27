@@ -11,7 +11,7 @@
 		{
 			"taskName": "Debug",
 			"args": [
-				"catkin_make -C ${workspaceRoot} -DCMAKE_BUILD_TYPE=Debug"
+				"catkin_make -C ${workspaceRoot} pcl_registration -DCMAKE_BUILD_TYPE=Debug"
 			],
 			"problemMatcher": [
 				{
