@@ -40,11 +40,11 @@ Description:1、Compute starting translation and rotation based on MomentOfInerti
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
-
+//算法时间测试
 #include <pcl/common/time.h>
-
+//字符串
 #include <string>
-
+//tf坐标系变换
 #include <tf/transform_broadcaster.h>
 
 //命名空间
@@ -80,8 +80,7 @@ struct PCD
 {
   PointCloud::Ptr cloud; //点云指针
   std::string f_name; //文件名
-    //构造函数
-  PCD() : cloud (new PointCloud) {}; //初始化
+  PCD() : cloud (new PointCloud) {}; //构造函数初始化
 };
 
 // 定义新的点表达方式< x, y, z, curvature > 坐标+曲率
@@ -159,7 +158,6 @@ void loadData (int argc, char **argv, std::vector<PCD, Eigen::aligned_allocator<
       //去除点云中的NaN点（xyz都是NaN）
       std::vector<int> indices; //保存去除的点的索引
       pcl::removeNaNFromPointCloud(*m.cloud,*m.cloud, indices); //去除点云中的NaN点
-      
       models.push_back (m);
     }
   }
@@ -347,16 +345,16 @@ void prePairAlign(const PointCloud::Ptr cloud_src,const PointCloud::Ptr cloud_tg
 	printf("\n");
 	printf("t = < %0.3f, %0.3f, %0.3f >\n", transformation2(0, 3), transformation2(1, 3), transformation2(2, 3));
 
-	// Executing the transformation
+	//Executing the transformation
 	//pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZ>());
-	// You can either apply transform_1 or transform_2; they are the same
-  //	pcl::transformPointCloud(*cloud_src, *transformed_cloud, transformation2);
+	//You can either apply transform_1 or transform_2; they are the same
+  //pcl::transformPointCloud(*cloud_src, *transformed_cloud, transformation2);
   pcl::transformPointCloud(*cloud_tgt, *transformed_cloud, transformation2);
    if(true == DEBUG_VISUALIZER)
   {
     p->addPointCloud<pcl::PointXYZ>(transformed_cloud, "prePairAlign cloud");
   }
-  //	pcl::io::savePCDFileASCII("transformed_cloud.pcd", *transformed_cloud);	
+  //pcl::io::savePCDFileASCII("transformed_cloud.pcd", *transformed_cloud);	
 }
 
 //简单地配准一对点云数据，并返回结果
@@ -413,7 +411,7 @@ void pairAlign (const PointCloud::Ptr cloud_src, const PointCloud::Ptr cloud_tgt
   //reg.setTransformationEpsilon (0.01); //设置容许的最大误差（迭代最优化）
   //***** 注意：根据自己数据库的大小调节该参数
   reg.setMaxCorrespondenceDistance (2);  //设置对应点之间的最大距离（2m）,在配准过程中，忽略大于该阈值的点  reg.setPointRepresentation (boost::make_shared<const MyPointRepresentation> (point_representation)); //设置点表达
-    //设置源点云和目标点云
+  //设置源点云和目标点云
   reg.setInputSource (points_with_normals_src); //版本不符合，使用下面的语句
   //reg.setInputCloud (points_with_normals_src); //设置输入点云（待变换的点云）
   reg.setInputTarget (points_with_normals_tgt); //设置目标点云
@@ -435,14 +433,12 @@ void pairAlign (const PointCloud::Ptr cloud_src, const PointCloud::Ptr cloud_tgt
     reg.align (*reg_result); //对齐（配准）两个点云
 
     Ti = reg.getFinalTransformation () * Ti; //累积（每次迭代的）变换矩阵
-        //如果这次变换和上次变换的误差比阈值小，通过减小最大的对应点距离的方法来进一步细化
+    //如果这次变换和上次变换的误差比阈值小，通过减小最大的对应点距离的方法来进一步细化
     if (fabs ((reg.getLastIncrementalTransformation () - prev).sum ()) < reg.getTransformationEpsilon ())
        break;
      prev = reg.getLastIncrementalTransformation (); //上一次变换的误差
-    // if (fabs (reg.getLastIncrementalTransformation ().sum()) > 3.9995)
-    //    break;
-   //std::cout<<"getLastIncrementalTransformation"<<reg.getLastIncrementalTransformation ()<<endl;
-     //std::cout<<"getLastIncrementalTransformation.sum: "<<reg.getLastIncrementalTransformation ().sum()<<endl;
+    //std::cout<<"getLastIncrementalTransformation"<<reg.getLastIncrementalTransformation ()<<endl;
+    //std::cout<<"getLastIncrementalTransformation.sum: "<<reg.getLastIncrementalTransformation ().sum()<<endl;
 
     //显示当前配准状态，在窗口的右视区，简单的显示源点云和目标点云
     if(true == DEBUG_VISUALIZER)
@@ -471,9 +467,8 @@ void pairAlign (const PointCloud::Ptr cloud_src, const PointCloud::Ptr cloud_tgt
     PCL_INFO ("Press q to continue the registration.\n");
     p->spin ();
 
-    p->removePointCloud ("source"); 
-    p->removePointCloud ("target");
-
+    // p->removePointCloud ("source"); 
+    // p->removePointCloud ("target");
     p->removePointCloud ("prePairAlign source"); //根据给定的ID，从屏幕中去除一个点云。参数是ID
     p->removePointCloud ("prePairAlign target"); //根据给定的ID，从屏幕中去除一个点云。参数是ID
     p->removeAllShapes();
@@ -492,11 +487,41 @@ void cloudCB(const sensor_msgs::PointCloud2& input)
     p->addPointCloud<pcl::PointXYZRGB>(cloud.makeShared(), "cloud test");
 
     p->spin ();
+
+    // //Convert the cloud to ROS message
+    // pcl::toROSMsg(*source, output);
+    // output.header.frame_id = "test";
+
+    // ros::Rate loop_rate(1);
+    // while (ros::ok())
+    // {
+    //     pcl_pub.publish(output);
+    //     ros::spinOnce();
+    //     loop_rate.sleep();
+    // }
+
+
+    //订阅相机发布点云数据
+    // ros::Subscriber pcl_sub = nh.subscribe("/camera/depth_registered/points", 1, cloudCB);
+    // ros::Rate rate(20.0);
+
+
+    // pcl::toROSMsg(*CloudTransformedTarget, PointCloud2TransformedTarget);
+    // PointCloud2TransformedTarget.header.frame_id = "CloudTransformedTarget";
+    // ros::Rate loop_rate(1);
+
+    // while (ros::ok())
+    //   {
+    //       pcl_pub.publish(PointCloud2TransformedTarget);
+    //       ros::spinOnce();
+    //       loop_rate.sleep();
+    //   }
 }
 
 //std::string lable = "faceshoulders";
 //std::string lable = "box_toothpaste_long";
 std::string lable = "bottle_milktea";
+bool bMaskRCNNMsg = true;
 
 void MaskRCNNCB(const sensor_msgs::ImageConstPtr& msg)
  {
@@ -509,13 +534,12 @@ void MaskRCNNCB(const sensor_msgs::ImageConstPtr& msg)
     ROS_ERROR("cv_bridge exception: %s", e.what());
     return;
   }
-  
 
-//   if(false == bMaskRCNNMsg)
-//   {
-//       bMaskRCNNMsg = true;
-//       depth_sub
-//   }
+  if(false == bMaskRCNNMsg)
+  {
+      bMaskRCNNMsg = true;
+      //depth_sub
+  }
 }
 
 /***********************全局变量****************************/
@@ -532,8 +556,10 @@ double camera_cy = 253.73;
 double camera_fx = 573.293;
 double camera_fy = 572.41;
 
-bool bMaskRCNNMsg = true;
 sensor_msgs::PointCloud2 PointCloud2TransformedTarget;
+
+Eigen::Vector3d euler_Angle;
+Eigen::Matrix3d Rotation_matrix = Eigen::Matrix3d::Identity();
 
 void Alignment()
 {
@@ -554,11 +580,9 @@ void Alignment()
       }
       else
       {
-          if(d > 0.6)//单独测试，通过距离分割物体
-           continue;
+        if(d > 0.6)//单独测试，通过距离分割物体
+        continue;
       }
-    
-     
       //计算这个点的空间坐标
       pcl::PointXYZ PointWorld;
       PointWorld.z = double(d)/camera_factor;
@@ -582,19 +606,19 @@ void Alignment()
  
   //根据label提取物体模型
   //std::string lable = "faceshoulders";
-  std::string ModelPath = "./model_pcd/";
+  std::string ModelPath = "/home/model/catkin_ws2/src/pcl_registration/model_pcd/";
   ModelPath = ModelPath + lable + "_model.pcd";
   if (pcl::io::loadPCDFile<pcl::PointXYZ> (ModelPath, *CloudModel) == -1) 
   {
     PCL_ERROR ("Couldn't read file bottle_milktea_model.pcd \n");
     return;
   }    
- ROS_INFO("points loaded from Model = %d",  CloudModel->width * CloudModel->height);
+  ROS_INFO("points loaded from Model = %d",  CloudModel->width * CloudModel->height);
  
- if(true == DEBUG_VISUALIZER)
- {
-  showCloudsLeft(CloudMask, CloudModel); //在左视区，简单的显示源点云和目标点云
- }     
+  if(true == DEBUG_VISUALIZER)
+  {
+    showCloudsLeft(CloudMask, CloudModel); //在左视区，简单的显示源点云和目标点云
+  }     
   //配准物体模型和场景中物体点云
   {
     pcl::ScopeTime scope_time("*PrePairAlign");//计算算法运行时间
@@ -605,24 +629,11 @@ void Alignment()
     PCL_INFO ("Press q to continue.\n");
     p->spin();
   }
-
   {
     pcl::ScopeTime scope_time("*PairAlign");//计算算法运行时间
     pairAlign (CloudMask, CloudPreProcess, CloudTransformedTarget, PairTransformation, true);
     bMaskRCNNMsg = false;
   }
-
-  // pcl::toROSMsg(*CloudTransformedTarget, PointCloud2TransformedTarget);
-  // PointCloud2TransformedTarget.header.frame_id = "CloudTransformedTarget";
-  // ros::Rate loop_rate(1);
-
-  // while (ros::ok())
-  //   {
-  //       pcl_pub.publish(PointCloud2TransformedTarget);
-  //       ros::spinOnce();
-  //       loop_rate.sleep();
-  //   }
-
   std::cout << "The Estimated Rotation and translation matrices are : \n" << std::endl;
   printf("\n");
   printf("    | %6.3f %6.3f %6.3f | \n", PairTransformation(0, 0), PairTransformation(0, 1), PairTransformation(0, 2));
@@ -630,7 +641,6 @@ void Alignment()
   printf("    | %6.3f %6.3f %6.3f | \n", PairTransformation(2, 0), PairTransformation(2, 1), PairTransformation(2, 2));
   printf("\n");
   printf("t = < %0.3f, %0.3f, %0.3f >\n", PairTransformation(0, 3), PairTransformation(1, 3), PairTransformation(2, 3));
-
 
   GlobalTransformation = PairTransformation*transformation2;
   std::cout << "The Global Rotation and translation matrices are : \n" << std::endl;
@@ -640,12 +650,11 @@ void Alignment()
   printf("    | %6.3f %6.3f %6.3f | \n", GlobalTransformation(2, 0), GlobalTransformation(2, 1), GlobalTransformation(2, 2));
   printf("\n");
   printf("t = < %0.3f, %0.3f, %0.3f >\n", GlobalTransformation(0, 3), GlobalTransformation(1, 3), GlobalTransformation(2, 3));
- if(true == DEBUG_VISUALIZER)
-  {
-    PCL_INFO ("Press q to contin.\n");
-    p->spin();
-  }
-
+  if(true == DEBUG_VISUALIZER)
+    {
+      PCL_INFO ("Press q to contin.\n");
+      p->spin();
+    }
 }
 
 //depth图显示的回调函数    
@@ -677,9 +686,42 @@ void depthCb(const sensor_msgs::ImageConstPtr& msg)
     Alignment();
     bMaskRCNNMsg = false;  
   }
-}
 
-//****************  入口函数  ************************
+//   for(int i = 0; i < 3; i++)
+//     for(int j = 0; j < 3; j++)
+//      {
+//         Rotation_matrix(i, j) = GlobalTransformation(i, j);
+//      }
+
+//   double thetax = 0;
+//   double thetay = 0;
+//   double thetaz = 0;
+//   euler_Angle = Rotation_matrix.eulerAngles(2, 1, 0);//顺序Z, Y, X
+//   thetax = euler_Angle[2];
+//   thetay = euler_Angle[1];
+//   thetaz = euler_Angle[0];
+ 
+// //  cout<<"thetax = "<<thetax<<endl;
+// //  cout<<"thetay = "<<thetay<<endl;
+// //  cout<<"thetaz = "<<thetaz<<endl;
+
+// //[Right to Left Camera Translate]
+// //-25.0752 0.155353 0.384843 
+
+//   while(1)
+//   {
+//     tf::Transform transform;
+//     static tf::TransformBroadcaster br;
+//     transform.setOrigin (tf::Vector3(GlobalTransformation(0, 3), GlobalTransformation(1, 3)+0.025, GlobalTransformation(2, 3)));
+//     transform.setRotation (tf::createQuaternionFromRPY (thetax, thetay, thetaz));// X Y Z
+//     br.sendTransform (tf::StampedTransform(transform, ros::Time::now (),"/camera_rgb_optical_frame", "/object"));
+//     ros::Duration(0, 5000000).sleep ();
+//     cv::waitKey(200);
+//   }
+}
+  
+
+//****************  主函数  ************************
 int main (int argc, char** argv)
 {
   // Initialize ROS
@@ -688,22 +730,16 @@ int main (int argc, char** argv)
   sensor_msgs::PointCloud2 output;
   pcl_pub = nh.advertise<sensor_msgs::PointCloud2> ("pcl_output", 1);//发布到主题（topic）
 
-  //mask_ptr->image = cv::Mat::ones(640,480,CV_8UC1);
-
   if(strcmp(argv[1], "-v") == 0)
   {
     DEBUG_VISUALIZER = true; 
     cout << "Visualizer = " << "true" << endl;
   }
-  else{
-     cout << "Visualizer = " << "false" << endl;
-  }
-
+  else
+    cout << "Visualizer = " << "false" << endl;
+  
   if(strcmp(argv[2], "-m") == 0)
-  {
-     lable = argv[3];
-  }
- 
+    lable = argv[3];
  
   if(true == DEBUG_VISUALIZER)
   {
@@ -713,39 +749,19 @@ int main (int argc, char** argv)
     p->createViewPort (0.5, 0, 1.0, 1.0, vp_2); //创建右视区
     cv::namedWindow("depth image");
   }
- 
   //创建点云指针和变换矩阵
   PointCloud::Ptr result (new PointCloud), source, pretarget(new PointCloud), target; //创建3个点云指针，分别用于结果，源点云和目标点云
   Eigen::Matrix4f GlobalTransform = Eigen::Matrix4f::Identity (), pairTransform; 
 
+  //ROS下与其他节点共同集成测试
   if(true == DEBUG_WITH_OTHERS)
   {
-    //ROS下与其他节点共同集成测试
-
     //订阅深度图
-    depth_sub = nh.subscribe("/camera/depth/image", 1 , depthCb); 
-    
-    
+    depth_sub = nh.subscribe("/camera/depth_registered/sw_registered/image_rect", 1 , depthCb); 
     //订阅mask-RCNN发布消息
     MaskRCNN_sub = nh.subscribe("maskRCNN",1,MaskRCNNCB); 
-
     //cv::destroyWindow("depth image"); 
-
-    // 发布变换后的物体点云和位恣信息
-    //Convert the cloud to ROS message
-    //pcl::toROSMsg(*CloudTransformedTarget, PointCloud2TransformedTarget);
-    //PointCloud2TransformedTarget.header.frame_id = "CloudTransformedTarget";
-
-    
-    // while (true == bMaskRCNNMsg)
-    // {
-    //   cv::waitKey(1000);
-    // }
-    // pcl_pub.publish(PointCloud2TransformedTarget);
-    //     ros::spinOnce();
-    //     loop_rate.sleep();
   }
-  
   else 
   {
     //模块独立测试，从硬盘读取测试点云和模型，
@@ -774,46 +790,13 @@ int main (int argc, char** argv)
           //显示正在配准的点云文件名和各自的点数
       PCL_INFO ("Aligning %s (%d points) with %s (%d points).\n", data[i-1].f_name.c_str (), source->points.size (), data[i].f_name.c_str (), target->points.size ());
 
-      if(i < 14) //没有粗配
-      {
-        prePairAlign(source, target, pretarget, true);
-        pairAlign (source, target, temp, pairTransform, true);
-      }
-      
-      else  //有粗配的情况
-      {
-      prePairAlign(source, target, pretarget,true);
-      pairAlign (source, pretarget, temp, pairTransform, true);
-      }
+      prePairAlign(source, target, pretarget, true);
+      pairAlign (source, target, temp, pairTransform, true);
       //将当前的一对点云数据，变换到全局变换中。
       pcl::transformPointCloud (*temp, *result, GlobalTransform);
       //更新全局变换
       GlobalTransform = GlobalTransform * pairTransform;
     }
-
-
-    // 保存成对的配准结果，变换到第一个点云帧
-    // std::stringstream ss; //这两句是生成文件名
-    // ss << i << ".pcd";
-    // pcl::io::savePCDFile (ss.str (), *result, true); //保存成对的配准结果
-
-    // //Convert the cloud to ROS message
-    // pcl::toROSMsg(*source, output);
-    // output.header.frame_id = "test";
-
-    // ros::Rate loop_rate(1);
-    // while (ros::ok())
-    // {
-    //     pcl_pub.publish(output);
-    //     ros::spinOnce();
-    //     loop_rate.sleep();
-    // }
-
-    //订阅相机发布点云数据
-    // ros::Subscriber pcl_sub = nh.subscribe("/camera/depth_registered/points", 1, cloudCB);
-    // ros::Rate rate(20.0);
   }
-  
-  // Spin
   ros::spin ();
 }

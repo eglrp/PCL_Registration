@@ -2,7 +2,6 @@
 #ignore folders
 /build
 /devel
-/model_pcd
 /test
 /src/orbbec_camera
 
@@ -12,3 +11,4 @@
 .ycm_extra_conf.pyc
 *.cam
 /src/CMakeLists.txt
+*.pcd
