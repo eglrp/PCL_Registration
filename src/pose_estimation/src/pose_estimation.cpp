@@ -606,7 +606,7 @@ void Alignment()
  
   //根据label提取物体模型
   //std::string lable = "faceshoulders";
-  std::string ModelPath = "/home/model/catkin_ws2/src/pcl_registration/model_pcd/";
+  std::string ModelPath = "/home/model/catkin_ws2/src/pose_estimation/model_pcd/";
   ModelPath = ModelPath + lable + "_model.pcd";
   if (pcl::io::loadPCDFile<pcl::PointXYZ> (ModelPath, *CloudModel) == -1) 
   {
@@ -670,15 +670,15 @@ void depthCb(const sensor_msgs::ImageConstPtr& msg)
     return;
   }
 
-  if(true == DEBUG_VISUALIZER)
-  {
-    //Draw an example circle on the video stream
-    if (cv_ptr->image.rows > 60 && cv_ptr->image.cols > 60)
-      cv::circle(cv_ptr->image, cv::Point(50, 50), 10, CV_RGB(255,0,0));
-    //Update GUI Window
-    cv::imshow("depth image", cv_ptr->image);
-    cv::waitKey(3);
-  }
+  // if(true == DEBUG_VISUALIZER)
+  // {
+  //   //Draw an example circle on the video stream
+  //   if (cv_ptr->image.rows > 60 && cv_ptr->image.cols > 60)
+  //     cv::circle(cv_ptr->image, cv::Point(50, 50), 10, CV_RGB(255,0,0));
+  //   //Update GUI Window
+  //   cv::imshow("depth image", cv_ptr->image);
+  //   cv::waitKey(3);
+  // }
   if(true == bMaskRCNNMsg)
   {
     depth_sub.shutdown();
@@ -744,10 +744,10 @@ int main (int argc, char** argv)
   if(true == DEBUG_VISUALIZER)
   {
     //创建一个 PCLVisualizer 对象
-    p = new pcl::visualization::PCLVisualizer (argc, argv, "Pairwise Incremental Registration example"); //p是全局变量
+    p = new pcl::visualization::PCLVisualizer (argc, argv, "Pairwise Registration"); //p是全局变量
     p->createViewPort (0.0, 0, 0.5, 1.0, vp_1); //创建左视区
     p->createViewPort (0.5, 0, 1.0, 1.0, vp_2); //创建右视区
-    cv::namedWindow("depth image");
+    //cv::namedWindow("depth image");
   }
   //创建点云指针和变换矩阵
   PointCloud::Ptr result (new PointCloud), source, pretarget(new PointCloud), target; //创建3个点云指针，分别用于结果，源点云和目标点云
