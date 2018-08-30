@@ -172,7 +172,7 @@ void prePairAlign(const PointCloud::Ptr cloud_src,const PointCloud::Ptr cloud_tg
   pcl::VoxelGrid<PointT> grid; //VoxelGrid 把一个给定的点云，聚集在一个局部的3D网格上,并下采样和滤波点云数据
   if (downsample) //下采样
   {
-    grid.setLeafSize (0.005, 0.005, 0.005); //设置体元网格的叶子大小
+    grid.setLeafSize (0.01, 0.01, 0.01); //设置体元网格的叶子大小
         //下采样 源点云
     grid.setInputCloud (cloud_src); //设置输入点云
     grid.filter (*src); //下采样和滤波，并存储在src中
@@ -371,7 +371,7 @@ void pairAlign (const PointCloud::Ptr cloud_src, const PointCloud::Ptr cloud_tgt
   pcl::VoxelGrid<PointT> grid; //VoxelGrid 把一个给定的点云，聚集在一个局部的3D网格上,并下采样和滤波点云数据
   if (downsample) //下采样
   {
-    grid.setLeafSize (0.005, 0.005, 0.005); //设置体元网格的叶子大小
+    grid.setLeafSize (0.01, 0.01, 0.01); //设置体元网格的叶子大小
         //下采样 源点云
     grid.setInputCloud (cloud_src); //设置输入点云
     grid.filter (*src); //下采样和滤波，并存储在src中
@@ -730,17 +730,35 @@ int main (int argc, char** argv)
   sensor_msgs::PointCloud2 output;
   pcl_pub = nh.advertise<sensor_msgs::PointCloud2> ("pcl_output", 1);//发布到主题（topic）
 
-  if(strcmp(argv[1], "-v") == 0)
+  if(4 == argc)
   {
-    DEBUG_VISUALIZER = true; 
-    cout << "Visualizer = " << "true" << endl;
+    if(strcmp(argv[1], "-v") == 0)
+    {
+      DEBUG_VISUALIZER = true; 
+      cout << "Visualizer = " << "true" << endl;
+    }
+    else
+      cout << "Visualizer = " << "false" << endl;
+    
+    if(strcmp(argv[2], "-m") == 0)
+      lable = argv[3];
+  }
+  else if(2 == argc)
+  {
+    if(strcmp(argv[1], "-v") == 0)
+    {
+      DEBUG_VISUALIZER = true; 
+      cout << "Visualizer = " << "true" << endl;
+    }
+    else
+      cout << "Visualizer = " << "false" << endl;
   }
   else
+  {
+    DEBUG_VISUALIZER = false; 
     cout << "Visualizer = " << "false" << endl;
+  }
   
-  if(strcmp(argv[2], "-m") == 0)
-    lable = argv[3];
- 
   if(true == DEBUG_VISUALIZER)
   {
     //创建一个 PCLVisualizer 对象
