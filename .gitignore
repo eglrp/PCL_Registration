@@ -4,6 +4,7 @@
 /devel
 /test
 /src/orbbec_camera
+/src/rviz_cloud_annotation
 
 #ignore files
 .catkin_workspace

@@ -7,7 +7,7 @@
 			"request": "launch",
 			"target": "${file}",
 			"cwd": "${workspaceRoot}",
-			"arguments": "-v -m bottle_milktea"
+			"arguments": "./test/20180626141943_box_toothpaste_long.pcd ./model_pcd/box_toothpaste_long_model.pcd"
 		},
 		{
 			"name": "C++ (remote)",
