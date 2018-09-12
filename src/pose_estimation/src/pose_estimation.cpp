@@ -172,7 +172,7 @@ void prePairAlign(const PointCloud::Ptr cloud_src,const PointCloud::Ptr cloud_tg
   pcl::VoxelGrid<PointT> grid; //VoxelGrid 把一个给定的点云，聚集在一个局部的3D网格上,并下采样和滤波点云数据
   if (downsample) //下采样
   {
-    grid.setLeafSize (0.01, 0.01, 0.01); //设置体元网格的叶子大小
+    grid.setLeafSize (0.007, 0.007, 0.007); //设置体元网格的叶子大小
         //下采样 源点云
     grid.setInputCloud (cloud_src); //设置输入点云
     grid.filter (*src); //下采样和滤波，并存储在src中
@@ -371,7 +371,7 @@ void pairAlign (const PointCloud::Ptr cloud_src, const PointCloud::Ptr cloud_tgt
   pcl::VoxelGrid<PointT> grid; //VoxelGrid 把一个给定的点云，聚集在一个局部的3D网格上,并下采样和滤波点云数据
   if (downsample) //下采样
   {
-    grid.setLeafSize (0.01, 0.01, 0.01); //设置体元网格的叶子大小
+    grid.setLeafSize (0.007, 0.007, 0.007); //设置体元网格的叶子大小
         //下采样 源点云
     grid.setInputCloud (cloud_src); //设置输入点云
     grid.filter (*src); //下采样和滤波，并存储在src中
@@ -523,6 +523,8 @@ void cloudCB(const sensor_msgs::PointCloud2& input)
 std::string lable = "bottle_milktea";
 bool bMaskRCNNMsg = true;
 
+ros::Timer timer1;
+
 void MaskRCNNCB(const sensor_msgs::ImageConstPtr& msg)
  {
    try
@@ -657,6 +659,15 @@ void Alignment()
     }
 }
 
+// void timer1(const ros::TimerEvent& event)
+// {
+//   std::cout<<"timer1"<<endl;
+// }
+
+  double thetax = 0;
+  double thetay = 0;
+  double thetaz = 0;
+
 //depth图显示的回调函数    
 void depthCb(const sensor_msgs::ImageConstPtr& msg)
 {
@@ -669,7 +680,7 @@ void depthCb(const sensor_msgs::ImageConstPtr& msg)
     ROS_ERROR("cv_bridge exception: %s", e.what());
     return;
   }
-
+  // //可视化深度图
   // if(true == DEBUG_VISUALIZER)
   // {
   //   //Draw an example circle on the video stream
@@ -679,6 +690,8 @@ void depthCb(const sensor_msgs::ImageConstPtr& msg)
   //   cv::imshow("depth image", cv_ptr->image);
   //   cv::waitKey(3);
   // }
+
+  //timer1 = nh.createTimer(ros::Duration(0.1), timer1, true);
   if(true == bMaskRCNNMsg)
   {
     depth_sub.shutdown();
@@ -687,38 +700,32 @@ void depthCb(const sensor_msgs::ImageConstPtr& msg)
     bMaskRCNNMsg = false;  
   }
 
-//   for(int i = 0; i < 3; i++)
-//     for(int j = 0; j < 3; j++)
-//      {
-//         Rotation_matrix(i, j) = GlobalTransformation(i, j);
-//      }
+  for(int i = 0; i < 3; i++)
+    for(int j = 0; j < 3; j++)
+     {
+        Rotation_matrix(i, j) = GlobalTransformation(i, j);
+     }
+  euler_Angle = Rotation_matrix.eulerAngles(2, 1, 0);//顺序Z, Y, X
+  thetax = euler_Angle[2];
+  thetay = euler_Angle[1];
+  thetaz = euler_Angle[0];
+  std::cout<<thetax<<endl;
+  std::cout<<thetay<<endl;
+  std::cout<<thetaz<<endl;
 
-//   double thetax = 0;
-//   double thetay = 0;
-//   double thetaz = 0;
-//   euler_Angle = Rotation_matrix.eulerAngles(2, 1, 0);//顺序Z, Y, X
-//   thetax = euler_Angle[2];
-//   thetay = euler_Angle[1];
-//   thetaz = euler_Angle[0];
- 
-// //  cout<<"thetax = "<<thetax<<endl;
-// //  cout<<"thetay = "<<thetay<<endl;
-// //  cout<<"thetaz = "<<thetaz<<endl;
-
-// //[Right to Left Camera Translate]
-// //-25.0752 0.155353 0.384843 
-
-//   while(1)
-//   {
-//     tf::Transform transform;
-//     static tf::TransformBroadcaster br;
-//     transform.setOrigin (tf::Vector3(GlobalTransformation(0, 3), GlobalTransformation(1, 3)+0.025, GlobalTransformation(2, 3)));
-//     transform.setRotation (tf::createQuaternionFromRPY (thetax, thetay, thetaz));// X Y Z
-//     br.sendTransform (tf::StampedTransform(transform, ros::Time::now (),"/camera_rgb_optical_frame", "/object"));
-//     ros::Duration(0, 5000000).sleep ();
-//     cv::waitKey(200);
-//   }
 }
+
+void Pose_Visualer(const ros::TimerEvent& event)
+{
+  tf::Transform transform;
+  static tf::TransformBroadcaster br;
+  transform.setOrigin (tf::Vector3(GlobalTransformation(0, 3), GlobalTransformation(1, 3), GlobalTransformation(2, 3)));
+  transform.setRotation (tf::createQuaternionFromRPY (thetax, thetay, thetaz));// X Y Z
+  br.sendTransform (tf::StampedTransform(transform, ros::Time::now (),"/camera_rgb_optical_frame", "/object"));
+  //[Right to Left Camera Translate]
+  //-25.0752 0.155353 0.384843 
+}
+
   
 
 //****************  主函数  ************************
@@ -727,6 +734,9 @@ int main (int argc, char** argv)
   // Initialize ROS
   ros::init (argc, argv, "pcl_registration");
   ros::NodeHandle nh;
+
+  // Rviz物体姿态可视化timer
+  ros::Timer timer = nh.createTimer(ros::Duration(0.1), Pose_Visualer);
   sensor_msgs::PointCloud2 output;
   pcl_pub = nh.advertise<sensor_msgs::PointCloud2> ("pcl_output", 1);//发布到主题（topic）
 
@@ -816,5 +826,15 @@ int main (int argc, char** argv)
       GlobalTransform = GlobalTransform * pairTransform;
     }
   }
+
+  // ros::MultiThreadedSpinner spinner(4); // Use 4 threads
+  // spinner.spin(); 
+  // ros::Rate r(10); // 10 hz
+  // while (true)
+  // {
+  //   ros::spinOnce();
+  //   r.sleep();
+  // }
   ros::spin ();
 }
+
