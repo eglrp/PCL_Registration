@@ -46,6 +46,10 @@ Description:1、Compute starting translation and rotation based on MomentOfInerti
 #include <string>
 //tf坐标系变换
 #include <tf/transform_broadcaster.h>
+//ros string消息
+#include "std_msgs/String.h"
+
+#include "std_msgs/Int8.h"
 
 //命名空间
 using pcl::visualization::PointCloudColorHandlerGenericField;
@@ -58,19 +62,20 @@ typedef pcl::PointNormal PointNormalT;
 typedef pcl::PointCloud<PointNormalT> PointCloudWithNormals;
 
 //**************全局变量**************//
-//ros发布对象
+  //ros发布对象
 ros::Publisher pub;
 ros::Subscriber depth_sub;
 ros::Subscriber MaskRCNN_sub;
+ros::Subscriber RobotControl_sub;
+ros::Subscriber Label_sub;
 
 ros::Publisher pcl_pub; 
-
 //可视化对象
 pcl::visualization::PCLVisualizer *p;
 //左视区和右视区，可视化窗口分成左右两部分
 int vp_1, vp_2;
 //ROS图像转OpenCV变量
-cv_bridge::CvImagePtr cv_ptr, mask_ptr;
+cv_bridge::CvImagePtr depth_ptr, mask_ptr;
 //调试标志
 bool DEBUG_WITH_OTHERS = true;
 bool DEBUG_VISUALIZER = false;
@@ -475,74 +480,7 @@ void pairAlign (const PointCloud::Ptr cloud_src, const PointCloud::Ptr cloud_tgt
   }
 }
 
-//订阅点云及可视化
-void cloudCB(const sensor_msgs::PointCloud2& input)
-{
-    pcl::PointCloud<pcl::PointXYZRGB> cloud; // With color
- 
-    pcl::fromROSMsg(input, cloud); // sensor_msgs::PointCloud2 ----> pcl::PointCloud<T>
- 
-    p->removePointCloud ("source"); 
-    p->removePointCloud ("target");
-    p->addPointCloud<pcl::PointXYZRGB>(cloud.makeShared(), "cloud test");
 
-    p->spin ();
-
-    // //Convert the cloud to ROS message
-    // pcl::toROSMsg(*source, output);
-    // output.header.frame_id = "test";
-
-    // ros::Rate loop_rate(1);
-    // while (ros::ok())
-    // {
-    //     pcl_pub.publish(output);
-    //     ros::spinOnce();
-    //     loop_rate.sleep();
-    // }
-
-
-    //订阅相机发布点云数据
-    // ros::Subscriber pcl_sub = nh.subscribe("/camera/depth_registered/points", 1, cloudCB);
-    // ros::Rate rate(20.0);
-
-
-    // pcl::toROSMsg(*CloudTransformedTarget, PointCloud2TransformedTarget);
-    // PointCloud2TransformedTarget.header.frame_id = "CloudTransformedTarget";
-    // ros::Rate loop_rate(1);
-
-    // while (ros::ok())
-    //   {
-    //       pcl_pub.publish(PointCloud2TransformedTarget);
-    //       ros::spinOnce();
-    //       loop_rate.sleep();
-    //   }
-}
-
-//std::string lable = "faceshoulders";
-//std::string lable = "box_toothpaste_long";
-std::string lable = "bottle_milktea";
-bool bMaskRCNNMsg = true;
-
-ros::Timer timer1;
-
-void MaskRCNNCB(const sensor_msgs::ImageConstPtr& msg)
- {
-   try
-  {
-    mask_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::TYPE_32FC1);
-  }
-  catch (cv_bridge::Exception& e)
-  {
-    ROS_ERROR("cv_bridge exception: %s", e.what());
-    return;
-  }
-
-  if(false == bMaskRCNNMsg)
-  {
-      bMaskRCNNMsg = true;
-      //depth_sub
-  }
-}
 
 /***********************全局变量****************************/
 pcl::PointCloud<pcl::PointXYZ>::Ptr CloudMask(new pcl::PointCloud<pcl::PointXYZ>);
@@ -558,10 +496,21 @@ double camera_cy = 253.73;
 double camera_fx = 573.293;
 double camera_fy = 572.41;
 
+double thetax = 0;
+double thetay = 0;
+double thetaz = 0;
+
 sensor_msgs::PointCloud2 PointCloud2TransformedTarget;
 
 Eigen::Vector3d euler_Angle;
 Eigen::Matrix3d Rotation_matrix = Eigen::Matrix3d::Identity();
+
+//std::string lable = "faceshoulders";
+//std::string lable = "box_toothpaste_long";
+std::string lable = "bottle_milktea";
+bool bUpdatingImage = false;
+bool bSaveImage = true;
+
 
 void Alignment()
 {
@@ -572,7 +521,7 @@ void Alignment()
     for(int ImgHeight = 200; ImgHeight < depth_cols-200; ImgHeight++ )
     {
       //获取深度图中对应点的深度值
-      float d = cv_ptr->image.at<float>(ImgWidth,ImgHeight);
+      float d = depth_ptr->image.at<float>(ImgWidth,ImgHeight);
       //判断mask中是否是物体的点
       if(mask_ptr != 0)
       {
@@ -634,7 +583,7 @@ void Alignment()
   {
     pcl::ScopeTime scope_time("*PairAlign");//计算算法运行时间
     pairAlign (CloudMask, CloudPreProcess, CloudTransformedTarget, PairTransformation, true);
-    bMaskRCNNMsg = false;
+    bSaveImage = false;
   }
   std::cout << "The Estimated Rotation and translation matrices are : \n" << std::endl;
   printf("\n");
@@ -657,54 +606,12 @@ void Alignment()
       PCL_INFO ("Press q to contin.\n");
       p->spin();
     }
-}
-
-// void timer1(const ros::TimerEvent& event)
-// {
-//   std::cout<<"timer1"<<endl;
-// }
-
-  double thetax = 0;
-  double thetay = 0;
-  double thetaz = 0;
-
-//depth图显示的回调函数    
-void depthCb(const sensor_msgs::ImageConstPtr& msg)
-{
-  try
-  {
-    cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::TYPE_32FC1);
-  }
-  catch (cv_bridge::Exception& e)
-  {
-    ROS_ERROR("cv_bridge exception: %s", e.what());
-    return;
-  }
-  // //可视化深度图
-  // if(true == DEBUG_VISUALIZER)
-  // {
-  //   //Draw an example circle on the video stream
-  //   if (cv_ptr->image.rows > 60 && cv_ptr->image.cols > 60)
-  //     cv::circle(cv_ptr->image, cv::Point(50, 50), 10, CV_RGB(255,0,0));
-  //   //Update GUI Window
-  //   cv::imshow("depth image", cv_ptr->image);
-  //   cv::waitKey(3);
-  // }
-
-  //timer1 = nh.createTimer(ros::Duration(0.1), timer1, true);
-  if(true == bMaskRCNNMsg)
-  {
-    depth_sub.shutdown();
-    cv::waitKey(100);
-    Alignment();
-    bMaskRCNNMsg = false;  
-  }
 
   for(int i = 0; i < 3; i++)
     for(int j = 0; j < 3; j++)
-     {
-        Rotation_matrix(i, j) = GlobalTransformation(i, j);
-     }
+    {
+      Rotation_matrix(i, j) = GlobalTransformation(i, j);
+    }
   euler_Angle = Rotation_matrix.eulerAngles(2, 1, 0);//顺序Z, Y, X
   thetax = euler_Angle[2];
   thetay = euler_Angle[1];
@@ -712,7 +619,161 @@ void depthCb(const sensor_msgs::ImageConstPtr& msg)
   std::cout<<thetax<<endl;
   std::cout<<thetay<<endl;
   std::cout<<thetaz<<endl;
+}
 
+
+//depth图显示的回调函数    
+void depthCb(const sensor_msgs::ImageConstPtr& msg)
+{
+  if(true == bSaveImage)
+  {
+     bSaveImage = false; 
+     bUpdatingImage = true;
+     ROS_INFO("Start saving depth image");
+     try
+    {
+      depth_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::TYPE_32FC1);
+    }
+    catch (cv_bridge::Exception& e)
+    {
+      ROS_ERROR("cv_bridge exception: %s", e.what());
+      return;
+    }
+    bUpdatingImage = false;
+    ROS_INFO("Stop saving depth image");
+  // //可视化深度图
+  // if(true == DEBUG_VISUALIZER)
+  // {
+  //   //Draw an example circle on the video stream
+  //   if (depth_ptr->image.rows > 60 && depth_ptr->image.cols > 60)
+  //     cv::circle(depth_ptr->image, cv::Point(50, 50), 10, CV_RGB(255,0,0));
+  //   //Update GUI Window
+  //   cv::imshow("depth image", depth_ptr->image);
+  //   cv::waitKey(3);
+  // }
+  }
+}
+
+/**
+ * Class Listener use Boost.Bind to pass arbitrary data into a subscription
+ * callback.  For more information on Boost.Bind see the documentation on the boost homepage,
+ * http://www.boost.org/
+ */
+class Listener
+{
+public:
+  ros::NodeHandle node_handle_;
+  ros::V_Subscriber subs_;    //std::vector<Subscriber>  向量容器
+ 
+  Listener(const ros::NodeHandle& node_handle)
+  : node_handle_(node_handle) //冒号的含义是使用参数node_handle对类的成员node_handle_进行初始化
+  {
+  }
+ 
+  void init()  //Listener类的init()方法
+  {
+    // std::vector<Subscriber>.push_back()在容器尾部加入一个Subscriber对象(节点句柄的subscribe方法返回的) ，
+    // boost::bind方法将一个函数转化成另一个函数
+    
+    subs_.push_back(node_handle_.subscribe<std_msgs::String>("chatter", 1000, boost::bind(&Listener::chatterCallback, this, _1, "User 1")));
+
+    subs_.push_back(node_handle_.subscribe<sensor_msgs::Image>("mask", 1, boost::bind(&Listener::MaskRCNNCB, this, _1, node_handle_)));
+
+    subs_.push_back(node_handle_.subscribe<std_msgs::String>("chatter", 1000, boost::bind(&Listener::chatterCallback, this, _1, "User 3")));
+  }
+ 
+  void chatterCallback(const std_msgs::String::ConstPtr& msg, std::string user_string)  //被boost::bind()转化之前的消息回调函数
+  {
+    ROS_INFO("I heard: [%s] with user string [%s]", msg->data.c_str(), user_string.c_str());
+  }
+
+  void MaskRCNNCB(const sensor_msgs::ImageConstPtr& msg, ros::NodeHandle& node_handle)
+  {
+    ROS_INFO("Mask Callback");
+    try
+    {
+      mask_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::TYPE_8UC1);
+    }
+    catch (cv_bridge::Exception& e)
+    {
+      ROS_ERROR("cv_bridge exception: %s", e.what());
+      return;
+    }
+    //判断深度图是否正在更新
+    while(bUpdatingImage)//********************需要验证是否阻塞其他订阅会掉线程*************************//
+    {
+      ros::MultiThreadedSpinner spinner(4); // Use 4 threads
+      spinner.spin(); 
+    }
+    depth_sub.shutdown();
+    //深度图和mask都已准备就绪，进行匹配
+    Alignment();
+    depth_sub = node_handle.subscribe("/camera/depth_registered/sw_registered/image_rect", 1 , depthCb);//******需要验证是否能够重新订阅成功*******//
+  }
+};
+
+
+//订阅点云及可视化
+void cloudCB(const sensor_msgs::PointCloud2& input)
+{
+    pcl::PointCloud<pcl::PointXYZRGB> cloud; // With color
+ 
+    pcl::fromROSMsg(input, cloud); // sensor_msgs::PointCloud2 ----> pcl::PointCloud<T>
+ 
+    p->removePointCloud ("source"); 
+    p->removePointCloud ("target");
+    p->addPointCloud<pcl::PointXYZRGB>(cloud.makeShared(), "cloud test");
+
+    p->spin ();
+
+    // //Convert the cloud to ROS message
+    // pcl::toROSMsg(*source, output);
+    // output.header.frame_id = "test";
+
+    // ros::Rate loop_rate(1);
+    // while (ros::ok())
+    // {
+    //     pcl_pub.publish(output);
+    //     ros::spinOnce();
+    //     loop_rate.sleep();
+    // }
+
+
+    //订阅相机发布点云数据
+    // ros::Subscriber pcl_sub = nh.subscribe("/camera/depth_registered/points", 1, cloudCB);
+    // ros::Rate rate(20.0);
+
+
+    // pcl::toROSMsg(*CloudTransformedTarget, PointCloud2TransformedTarget);
+    // PointCloud2TransformedTarget.header.frame_id = "CloudTransformedTarget";
+    // ros::Rate loop_rate(1);
+
+    // while (ros::ok())
+    //   {
+    //       pcl_pub.publish(PointCloud2TransformedTarget);
+    //       ros::spinOnce();
+    //       loop_rate.sleep();
+    //   }
+}
+
+void Label_Callback(const std_msgs::String::ConstPtr& msg)
+{
+  ROS_INFO("Label Callback");
+  ROS_INFO("I heard: [%s]", msg->data.c_str());
+  lable =  msg->data.c_str();
+}
+
+
+void RobotControl_Callback(const std_msgs::Int8::ConstPtr& msg)
+{
+  ROS_INFO("RobotControl Callback");
+  if(1 == msg->data)
+  {
+    if(false == bSaveImage)
+    {
+        bSaveImage = true;
+    }
+  }
 }
 
 void Pose_Visualer(const ros::TimerEvent& event)
@@ -784,11 +845,20 @@ int main (int argc, char** argv)
   //ROS下与其他节点共同集成测试
   if(true == DEBUG_WITH_OTHERS)
   {
+    //订阅RC消息，采集图像
+    RobotControl_sub = nh.subscribe("robotcontrol", 1, RobotControl_Callback);
     //订阅深度图
     depth_sub = nh.subscribe("/camera/depth_registered/sw_registered/image_rect", 1 , depthCb); 
     //订阅mask-RCNN发布消息
-    MaskRCNN_sub = nh.subscribe("maskRCNN",1,MaskRCNNCB); 
-    //cv::destroyWindow("depth image"); 
+    //MaskRCNN_sub = nh.subscribe("maskRCNN",1,MaskRCNNCB); 
+    //订阅label
+    Label_sub = nh.subscribe("label", 1, Label_Callback);
+
+     
+    // Listener l(n);        //创建Listener类
+    // l.init();             //调用Listener类的init（）方法，创建3个话题订阅者，并压入容器
+ 
+ 
   }
   else 
   {
@@ -827,8 +897,7 @@ int main (int argc, char** argv)
     }
   }
 
-  // ros::MultiThreadedSpinner spinner(4); // Use 4 threads
-  // spinner.spin(); 
+  
   // ros::Rate r(10); // 10 hz
   // while (true)
   // {
