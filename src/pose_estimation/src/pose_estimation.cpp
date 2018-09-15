@@ -482,7 +482,7 @@ Eigen::Matrix3d Rotation_matrix = Eigen::Matrix3d::Identity();
 
 std::string label = "bottle_milktea";
 bool bUpdatingImage = false;
-bool bSaveImage = true;
+bool bSaveImage = false;
 
 sensor_msgs::PointCloud2 PointCloud2TransformedTarget;
 
@@ -506,7 +506,7 @@ void Alignment()
       }
       else
       {
-        if(d > 0.6)//单独测试，通过距离分割物体
+        ROS_INFO("mask image pointer mask_ptr = null");
         continue;
       }
       //计算这个点的空间坐标
@@ -520,7 +520,7 @@ void Alignment()
   //设置点云属性，采用无序排列方式存储点云
   CloudMask->height = 1;
   CloudMask->width = CloudMask->points.size();
-  ROS_INFO("point cloud size = %d", CloudMask->width);
+  ROS_INFO("mask cloud size = %d", CloudMask->width);
   CloudMask->is_dense = false;
   if(true == DEBUG_VISUALIZER)
   {
@@ -531,9 +531,10 @@ void Alignment()
   }
  
   //欧式聚类去处理离群点，保留最大点集，避免RGB—D对齐误差或者MaskRCNN识别误差导致分层现象
-  EuclideanCluster(CloudMask, CloudEuclideanCluster);
+  //EuclideanCluster(CloudMask, CloudEuclideanCluster);
 
   //根据label提取物体模型
+  //std::string ModelPath = "/home/siasun/Desktop/RobGrab/src/pose_estimation/model_pcd/";
   std::string ModelPath = "/home/model/catkin_ws2/src/pose_estimation/model_pcd/";
   ModelPath = ModelPath + label + "_model.pcd";
   std::cout << "Object Label : " << label << endl;
@@ -626,13 +627,13 @@ class Listener
     // std::vector<Subscriber>.push_back()在容器尾部加入一个Subscriber对象(节点句柄的subscribe方法返回的) ，
     // boost::bind方法将一个函数转化成另一个函数
     //subs_.push_back(node_handle_.subscribe<std_msgs::String>("chatter", 1000, boost::bind(&Listener::chatterCallback, this, _1, "User 1")));
-    subs_.push_back(node_handle_.subscribe<sensor_msgs::Image>("mask", 1, boost::bind(&Listener::Mask_Callback, this, _1, node_handle_)));
+    subs_.push_back(node_handle_.subscribe<sensor_msgs::Image>("/segment/segment_image", 1, boost::bind(&Listener::Mask_Callback, this, _1, node_handle_)));
     //订阅RC消息，采集图像
-    RobotControl_sub_ = node_handle_.subscribe("RC", 1, CaptureImage_Callback);
+    RobotControl_sub_ = node_handle_.subscribe("/command/recog_command", 1, CaptureImage_Callback);
     //订阅深度图
     depth_sub_ = node_handle_.subscribe("/camera/depth_registered/sw_registered/image_rect", 1 , Depth_Callback);
     //订阅label
-    Label_sub_ = node_handle_.subscribe("label", 1, Label_Callback); 
+    Label_sub_ = node_handle_.subscribe("/segment/segment_class", 1, Label_Callback); 
   }
   // void chatterCallback(const std_msgs::String::ConstPtr& msg, std::string user_string)  //被boost::bind()转化之前的消息回调函数
   // {
@@ -689,16 +690,20 @@ void Listener::Mask_Callback(const sensor_msgs::ImageConstPtr& msg, ros::NodeHan
     ROS_ERROR("cv_bridge exception: %s", e.what());
     return;
   }
+  
+  ros::Rate r(10); // 10 hz
   //判断深度图是否正在更新
   while(bUpdatingImage)//********************需要验证是否阻塞其他订阅会掉线程*************************//
   {
-    ros::MultiThreadedSpinner spinner(4); // Use 4 threads
-    spinner.spin(); 
+    ROS_INFO("Waiting for saving depth image");
+    ros::spinOnce();
+    r.sleep();
   }
   //关闭相机深度图订阅，1、锁定准备操作的深度图；2、减少配准过程订阅图像的资源利用率
   //depth_sub.shutdown();
   this->depth_sub_.shutdown();
   //深度图和mask都已准备就绪，进行匹配
+  ROS_INFO("Start Alignment");
   Alignment();
   //回复订阅相机深度图
   this->depth_sub_ = node_handle.subscribe("/camera/depth_registered/sw_registered/image_rect", 1 , Depth_Callback);//******需要验证是否能够重新订阅成功*******//
