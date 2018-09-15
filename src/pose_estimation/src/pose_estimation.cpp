@@ -46,30 +46,19 @@ Description:1¡¢Compute starting translation and rotation based on MomentOfInerti
 #include <string>
 //tf×ø±êÏµ±ä»»
 #include <tf/transform_broadcaster.h>
-//ros stringÏûÏ¢
+//ros stdÏûÏ¢
 #include "std_msgs/String.h"
-
 #include "std_msgs/Int8.h"
 
-//ÃüÃû¿Õ¼ä
-using pcl::visualization::PointCloudColorHandlerGenericField;
-using pcl::visualization::PointCloudColorHandlerCustom;
+#include <pcl/segmentation/extract_clusters.h>
 
-//¶¨ÒåÀàĞÍµÄ±ğÃû
+//pclÀàĞÍÃû¼ò»¯
 typedef pcl::PointXYZ PointT;
 typedef pcl::PointCloud<PointT> PointCloud;
 typedef pcl::PointNormal PointNormalT;
 typedef pcl::PointCloud<PointNormalT> PointCloudWithNormals;
 
 //**************È«¾Ö±äÁ¿**************//
-  //ros·¢²¼¶ÔÏó
-ros::Publisher pub;
-ros::Subscriber depth_sub;
-ros::Subscriber MaskRCNN_sub;
-ros::Subscriber RobotControl_sub;
-ros::Subscriber Label_sub;
-
-ros::Publisher pcl_pub; 
 //¿ÉÊÓ»¯¶ÔÏó
 pcl::visualization::PCLVisualizer *p;
 //×óÊÓÇøºÍÓÒÊÓÇø£¬¿ÉÊÓ»¯´°¿Ú·Ö³É×óÓÒÁ½²¿·Ö
@@ -77,16 +66,40 @@ int vp_1, vp_2;
 //ROSÍ¼Ïñ×ªOpenCV±äÁ¿
 cv_bridge::CvImagePtr depth_ptr, mask_ptr;
 //µ÷ÊÔ±êÖ¾
-bool DEBUG_WITH_OTHERS = true;
 bool DEBUG_VISUALIZER = false;
+//prePairAlign transformation matrix
+pcl::registration::TransformationEstimationSVD<pcl::PointXYZ, pcl::PointXYZ>::Matrix4 MomentOfInertia_Transformation;
+//PairAlign transformation matrix
+Eigen::Matrix4f  PairAlign_Transformation, GlobalTransformation = Eigen::Matrix4f::Identity(); 
 
-//¶¨Òå½á¹¹Ìå£¬ÓÃÓÚ´¦ÀíµãÔÆ
-struct PCD
+//ÔÚ´°¿ÚµÄ×óÊÓÇø£¬¼òµ¥µÄÏÔÊ¾Ô´µãÔÆºÍÄ¿±êµãÔÆ
+void showCloudsLeft(const PointCloud::Ptr cloud_target, const PointCloud::Ptr cloud_source)
 {
-  PointCloud::Ptr cloud; //µãÔÆÖ¸Õë
-  std::string f_name; //ÎÄ¼şÃû
-  PCD() : cloud (new PointCloud) {}; //¹¹Ôìº¯Êı³õÊ¼»¯
-};
+  p->removePointCloud ("vp1_target"); //¸ù¾İ¸ø¶¨µÄID£¬´ÓÆÁÄ»ÖĞÈ¥³ıÒ»¸öµãÔÆ¡£²ÎÊıÊÇID
+  p->removePointCloud ("vp1_source"); //
+  pcl::visualization::PointCloudColorHandlerCustom<PointT> tgt_h (cloud_target, 0, 255, 0); //Ä¿±êµãÔÆÂÌÉ«
+  pcl::visualization::PointCloudColorHandlerCustom<PointT> src_h (cloud_source, 255, 0, 0); //Ô´µãÔÆºìÉ«
+  p->addPointCloud (cloud_target, tgt_h, "vp1_target", vp_1); //¼ÓÔØµãÔÆ
+  p->addPointCloud (cloud_source, src_h, "vp1_source", vp_1);
+  PCL_INFO ("Press q to begin the registration.\n"); //ÔÚÃüÁîĞĞÖĞÏÔÊ¾ÌáÊ¾ĞÅÏ¢
+  p-> spin();
+}
+
+//ÔÚ´°¿ÚµÄÓÒÊÓÇø£¬¼òµ¥µÄÏÔÊ¾Ô´µãÔÆºÍÄ¿±êµãÔÆ
+void showCloudsRight(const PointCloudWithNormals::Ptr cloud_target, const PointCloudWithNormals::Ptr cloud_source)
+{
+  p->removePointCloud ("source"); //¸ù¾İ¸ø¶¨µÄID£¬´ÓÆÁÄ»ÖĞÈ¥³ıÒ»¸öµãÔÆ¡£²ÎÊıÊÇID
+  p->removePointCloud ("target");
+  pcl::visualization::PointCloudColorHandlerGenericField<PointNormalT> tgt_color_handler (cloud_target, "curvature"); //Ä¿±êµãÔÆ²ÊÉ«¾ä±ú
+  if (!tgt_color_handler.isCapable ())
+      PCL_WARN ("Cannot create curvature color handler!");
+  pcl::visualization::PointCloudColorHandlerGenericField<PointNormalT> src_color_handler (cloud_source, "curvature"); //Ô´µãÔÆ²ÊÉ«¾ä±ú
+  if (!src_color_handler.isCapable ())
+      PCL_WARN ("Cannot create curvature color handler!");
+  p->addPointCloud (cloud_target, tgt_color_handler, "target", vp_2); //¼ÓÔØµãÔÆ
+  p->addPointCloud (cloud_source, src_color_handler, "source", vp_2);
+  p->spinOnce();
+}
 
 // ¶¨ÒåĞÂµÄµã±í´ï·½Ê½< x, y, z, curvature > ×ø±ê+ÇúÂÊ
 class MyPointRepresentation : public pcl::PointRepresentation <PointNormalT> //¼Ì³Ğ¹ØÏµ
@@ -109,67 +122,6 @@ class MyPointRepresentation : public pcl::PointRepresentation <PointNormalT> //¼
   }
 };
 
-//ÔÚ´°¿ÚµÄ×óÊÓÇø£¬¼òµ¥µÄÏÔÊ¾Ô´µãÔÆºÍÄ¿±êµãÔÆ
-void showCloudsLeft(const PointCloud::Ptr cloud_target, const PointCloud::Ptr cloud_source)
-{
-  p->removePointCloud ("vp1_target"); //¸ù¾İ¸ø¶¨µÄID£¬´ÓÆÁÄ»ÖĞÈ¥³ıÒ»¸öµãÔÆ¡£²ÎÊıÊÇID
-  p->removePointCloud ("vp1_source"); //
-  PointCloudColorHandlerCustom<PointT> tgt_h (cloud_target, 0, 255, 0); //Ä¿±êµãÔÆÂÌÉ«
-  PointCloudColorHandlerCustom<PointT> src_h (cloud_source, 255, 0, 0); //Ô´µãÔÆºìÉ«
-  p->addPointCloud (cloud_target, tgt_h, "vp1_target", vp_1); //¼ÓÔØµãÔÆ
-  p->addPointCloud (cloud_source, src_h, "vp1_source", vp_1);
-  PCL_INFO ("Press q to begin the registration.\n"); //ÔÚÃüÁîĞĞÖĞÏÔÊ¾ÌáÊ¾ĞÅÏ¢
-  p-> spin();
-}
-
-//ÔÚ´°¿ÚµÄÓÒÊÓÇø£¬¼òµ¥µÄÏÔÊ¾Ô´µãÔÆºÍÄ¿±êµãÔÆ
-void showCloudsRight(const PointCloudWithNormals::Ptr cloud_target, const PointCloudWithNormals::Ptr cloud_source)
-{
-  p->removePointCloud ("source"); //¸ù¾İ¸ø¶¨µÄID£¬´ÓÆÁÄ»ÖĞÈ¥³ıÒ»¸öµãÔÆ¡£²ÎÊıÊÇID
-  p->removePointCloud ("target");
-  PointCloudColorHandlerGenericField<PointNormalT> tgt_color_handler (cloud_target, "curvature"); //Ä¿±êµãÔÆ²ÊÉ«¾ä±ú
-  if (!tgt_color_handler.isCapable ())
-      PCL_WARN ("Cannot create curvature color handler!");
-  PointCloudColorHandlerGenericField<PointNormalT> src_color_handler (cloud_source, "curvature"); //Ô´µãÔÆ²ÊÉ«¾ä±ú
-  if (!src_color_handler.isCapable ())
-      PCL_WARN ("Cannot create curvature color handler!");
-  p->addPointCloud (cloud_target, tgt_color_handler, "target", vp_2); //¼ÓÔØµãÔÆ
-  p->addPointCloud (cloud_source, src_color_handler, "source", vp_2);
-  p->spinOnce();
-}
-
-// ¶ÁÈ¡Ò»ÏµÁĞµÄPCDÎÄ¼ş£¨Ï£ÍûÅä×¼µÄµãÔÆÎÄ¼ş£©
-// ²ÎÊıargc ²ÎÊıµÄÊıÁ¿£¨À´×Ômain()£©
-// ²ÎÊıargv ²ÎÊıµÄÁĞ±í£¨À´×Ômain()£©
-// ²ÎÊımodels µãÔÆÊı¾İ¼¯µÄ½á¹ûÏòÁ¿
-void loadData (int argc, char **argv, std::vector<PCD, Eigen::aligned_allocator<PCD> > &models)
-{
-  std::string extension (".pcd"); //ÉùÃ÷²¢³õÊ¼»¯stringÀàĞÍ±äÁ¿extension£¬±íÊ¾ÎÄ¼şºó×ºÃû
-  // Í¨¹ı±éÀúÎÄ¼şÃû£¬¶ÁÈ¡pcdÎÄ¼ş
-  for (int i = 1; i < argc; i++) //±éÀúËùÓĞµÄÎÄ¼şÃû£¨ÂÔ¹ı³ÌĞòÃû£©
-  {
-    std::string fname = std::string (argv[i]);
-    if (fname.size () <= extension.size ()) //ÎÄ¼şÃûµÄ³¤¶ÈÊÇ·ñ·ûºÏÒªÇó
-      continue;
-
-    std::transform (fname.begin (), fname.end (), fname.begin (), (int(*)(int))tolower); //½«Ä³²Ù×÷(Ğ¡Ğ´×ÖÄ¸»¯)Ó¦ÓÃÓÚÖ¸¶¨·¶Î§µÄÃ¿¸öÔªËØ
-    //¼ì²éÎÄ¼şÊÇ·ñÊÇpcdÎÄ¼ş
-    if (fname.compare (fname.size () - extension.size (), extension.size (), extension) == 0)
-    {
-      // ¶ÁÈ¡µãÔÆ£¬²¢±£´æµ½models
-      PCD m;
-      m.f_name = argv[i];
-      pcl::io::loadPCDFile (argv[i], *m.cloud); //¶ÁÈ¡µãÔÆÊı¾İ
-      //È¥³ıµãÔÆÖĞµÄNaNµã£¨xyz¶¼ÊÇNaN£©
-      std::vector<int> indices; //±£´æÈ¥³ıµÄµãµÄË÷Òı
-      pcl::removeNaNFromPointCloud(*m.cloud,*m.cloud, indices); //È¥³ıµãÔÆÖĞµÄNaNµã
-      models.push_back (m);
-    }
-  }
-}
-
-
-pcl::registration::TransformationEstimationSVD<pcl::PointXYZ, pcl::PointXYZ>::Matrix4 transformation2;
 void prePairAlign(const PointCloud::Ptr cloud_src,const PointCloud::Ptr cloud_tgt, PointCloud::Ptr transformed_cloud,  bool downsample)
 {
   PointCloud::Ptr src (new PointCloud); //´´½¨µãÔÆÖ¸Õë
@@ -188,7 +140,7 @@ void prePairAlign(const PointCloud::Ptr cloud_src,const PointCloud::Ptr cloud_tg
     PCL_INFO ("Partial Pointcloud size after sampling is. %d.\n", src->size());
     PCL_INFO ("Model Pointcloud size after sampling is. %d.\n", tgt->size());
   }
-  else //²»ÏÂ²ÉÑù
+  else //²»½øĞĞÏÂ²ÉÑù
   {
     src = cloud_src; //Ö±½Ó¸´ÖÆ
     tgt = cloud_tgt;
@@ -288,7 +240,6 @@ void prePairAlign(const PointCloud::Ptr cloud_src,const PointCloud::Ptr cloud_tg
     p->addLine(pt3, pt7, 1.0, 0.0, 0.0, "12 edge");
   }
 
-
 	//************************************¼ÆËãĞı×ª¾ØÕó***********************************//
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in(new pcl::PointCloud<pcl::PointXYZ>());
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out(new pcl::PointCloud<pcl::PointXYZ>());
@@ -340,21 +291,21 @@ void prePairAlign(const PointCloud::Ptr cloud_src,const PointCloud::Ptr cloud_tg
 	//ÀûÓÃSVD·½·¨Çó½â±ä»»¾ØÕó  
 	pcl::registration::TransformationEstimationSVD<pcl::PointXYZ, pcl::PointXYZ> TESVD;
 
-	TESVD.estimateRigidTransformation(*cloud_in, *cloud_out, transformation2);
+	TESVD.estimateRigidTransformation(*cloud_in, *cloud_out, MomentOfInertia_Transformation);
 	//Êä³ö±ä»»¾ØÕóĞÅÏ¢  
 	std::cout << "The Pre-estimated Rotation and translation matrices are : \n" << std::endl;
 	printf("\n");
-	printf("    | %6.3f %6.3f %6.3f | \n", transformation2(0, 0), transformation2(0, 1), transformation2(0, 2));
-	printf("R = | %6.3f %6.3f %6.3f | \n", transformation2(1, 0), transformation2(1, 1), transformation2(1, 2));
-	printf("    | %6.3f %6.3f %6.3f | \n", transformation2(2, 0), transformation2(2, 1), transformation2(2, 2));
+	printf("    | %6.3f %6.3f %6.3f | \n", MomentOfInertia_Transformation(0, 0), MomentOfInertia_Transformation(0, 1), MomentOfInertia_Transformation(0, 2));
+	printf("R = | %6.3f %6.3f %6.3f | \n", MomentOfInertia_Transformation(1, 0), MomentOfInertia_Transformation(1, 1), MomentOfInertia_Transformation(1, 2));
+	printf("    | %6.3f %6.3f %6.3f | \n", MomentOfInertia_Transformation(2, 0), MomentOfInertia_Transformation(2, 1), MomentOfInertia_Transformation(2, 2));
 	printf("\n");
-	printf("t = < %0.3f, %0.3f, %0.3f >\n", transformation2(0, 3), transformation2(1, 3), transformation2(2, 3));
+	printf("t = < %0.3f, %0.3f, %0.3f >\n", MomentOfInertia_Transformation(0, 3), MomentOfInertia_Transformation(1, 3), MomentOfInertia_Transformation(2, 3));
 
 	//Executing the transformation
 	//pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZ>());
 	//You can either apply transform_1 or transform_2; they are the same
-  //pcl::transformPointCloud(*cloud_src, *transformed_cloud, transformation2);
-  pcl::transformPointCloud(*cloud_tgt, *transformed_cloud, transformation2);
+  //pcl::transformPointCloud(*cloud_src, *transformed_cloud, MomentOfInertia_Transformation);
+  pcl::transformPointCloud(*cloud_tgt, *transformed_cloud, MomentOfInertia_Transformation);
    if(true == DEBUG_VISUALIZER)
   {
     p->addPointCloud<pcl::PointXYZ>(transformed_cloud, "prePairAlign cloud");
@@ -464,29 +415,55 @@ void pairAlign (const PointCloud::Ptr cloud_src, const PointCloud::Ptr cloud_tgt
     p->removePointCloud ("source"); //¸ù¾İ¸ø¶¨µÄID£¬´ÓÆÁÄ»ÖĞÈ¥³ıÒ»¸öµãÔÆ¡£²ÎÊıÊÇID
     p->removePointCloud ("target");
     p->removePointCloud("prePairAlign cloud");
-    PointCloudColorHandlerCustom<PointT> cloud_tgt_h (output, 0, 255, 0); //ÉèÖÃµãÔÆÏÔÊ¾ÑÕÉ«£¬ÏÂÍ¬
-    PointCloudColorHandlerCustom<PointT> cloud_src_h (cloud_src, 255, 0, 0);
+    pcl::visualization::PointCloudColorHandlerCustom<PointT> cloud_tgt_h (output, 0, 255, 0); //ÉèÖÃµãÔÆÏÔÊ¾ÑÕÉ«£¬ÏÂÍ¬
+    pcl::visualization::PointCloudColorHandlerCustom<PointT> cloud_src_h (cloud_src, 255, 0, 0);
     p->addPointCloud (output, cloud_tgt_h, "target", vp_2); //Ìí¼ÓµãÔÆÊı¾İ£¬ÏÂÍ¬
     p->addPointCloud (cloud_src, cloud_src_h, "source", vp_2);
 
     PCL_INFO ("Press q to continue the registration.\n");
     p->spin ();
 
-    // p->removePointCloud ("source"); 
-    // p->removePointCloud ("target");
     p->removePointCloud ("prePairAlign source"); //¸ù¾İ¸ø¶¨µÄID£¬´ÓÆÁÄ»ÖĞÈ¥³ıÒ»¸öµãÔÆ¡£²ÎÊıÊÇID
     p->removePointCloud ("prePairAlign target"); //¸ù¾İ¸ø¶¨µÄID£¬´ÓÆÁÄ»ÖĞÈ¥³ıÒ»¸öµãÔÆ¡£²ÎÊıÊÇID
     p->removeAllShapes();
   }
 }
 
+void EuclideanCluster(const PointCloud::Ptr cloud_Segmentation, const PointCloud::Ptr cloud_EuclideanCluster)
+{
+//********************************Å·Ê½¾ÛÀà******************************//
+	//´´½¨ÓÃÓÚÌáÈ¡ËÑË÷·½·¨µÄkdtreeÊ÷¶ÔÏó
+	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+	tree->setInputCloud(cloud_Segmentation);
 
+	std::vector<pcl::PointIndices> cluster_indices;
+	pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;   //Å·Ê½¾ÛÀà¶ÔÏó
+	ec.setClusterTolerance(0.02);                     // ÉèÖÃ½üÁÚËÑË÷µÄËÑË÷°ë¾¶Îª2cm
+	ec.setMinClusterSize(100);                 //ÉèÖÃÒ»¸ö¾ÛÀàĞèÒªµÄ×îÉÙµÄµãÊıÄ¿Îª10
+	ec.setMaxClusterSize(1000000);               //ÉèÖÃÒ»¸ö¾ÛÀàĞèÒªµÄ×î´óµãÊıÄ¿Îª250000
+	ec.setSearchMethod(tree);                    //ÉèÖÃµãÔÆµÄËÑË÷»úÖÆ
+	ec.setInputCloud(cloud_Segmentation);
+	ec.extract(cluster_indices);           //´ÓµãÔÆÖĞÌáÈ¡¾ÛÀà£¬²¢½«µãÔÆË÷Òı±£´æÔÚcluster_indicesÖĞ
+										   //µü´ú·ÃÎÊµãÔÆË÷Òıcluster_indices,Ö±µ½·Ö¸î´¦ËùÓĞ¾ÛÀà
+	std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin();
+	//ÈİÆ÷ÖĞµÄµãÔÆµÄË÷ÒıµÚÒ»¸öÎªÎïÌåµãÔÆÊı¾İ
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+	for (std::vector<int>::const_iterator pit = it->indices.begin(); pit != it->indices.end(); ++pit)
+		//ÉèÖÃ±£´æµãÔÆµÄÊôĞÔÎÊÌâ
+	cloud_EuclideanCluster->points.push_back(cloud_Segmentation->points[*pit]);
+	cloud_EuclideanCluster->width = cloud_EuclideanCluster->points.size();
+	cloud_EuclideanCluster->height = 1;
+	cloud_EuclideanCluster->is_dense = true;
+	std::cout << "PointCloud representing the Cluster: " << cloud_EuclideanCluster->points.size() << " data points." << std::endl;
+}
 
 /***********************È«¾Ö±äÁ¿****************************/
 pcl::PointCloud<pcl::PointXYZ>::Ptr CloudMask(new pcl::PointCloud<pcl::PointXYZ>);
 pcl::PointCloud<pcl::PointXYZ>::Ptr CloudModel (new pcl::PointCloud<pcl::PointXYZ>);
 pcl::PointCloud<pcl::PointXYZ>::Ptr CloudPreProcess (new pcl::PointCloud<pcl::PointXYZ>);
-Eigen::Matrix4f  PairTransformation, GlobalTransformation = Eigen::Matrix4f::Identity(); 
+
+pcl::PointCloud<pcl::PointXYZ>::Ptr CloudEuclideanCluster(new pcl::PointCloud<pcl::PointXYZ>);
+
 PointCloud::Ptr CloudTransformedTarget (new PointCloud); //´´½¨ÁÙÊ±µãÔÆÖ¸Õë
 int depth_cols = 640;
 int depth_rows = 480;
@@ -500,18 +477,16 @@ double thetax = 0;
 double thetay = 0;
 double thetaz = 0;
 
-sensor_msgs::PointCloud2 PointCloud2TransformedTarget;
-
 Eigen::Vector3d euler_Angle;
 Eigen::Matrix3d Rotation_matrix = Eigen::Matrix3d::Identity();
 
-//std::string lable = "faceshoulders";
-//std::string lable = "box_toothpaste_long";
-std::string lable = "bottle_milktea";
+std::string label = "bottle_milktea";
 bool bUpdatingImage = false;
 bool bSaveImage = true;
 
+sensor_msgs::PointCloud2 PointCloud2TransformedTarget;
 
+//ÕûºÏµÄÅä×¼º¯Êı
 void Alignment()
 {
   //ÀûÓÃÉî¶ÈÍ¼ºÍmask·Ö¸î³¡¾°ÖĞÎïÌåµãÔÆ 
@@ -555,13 +530,17 @@ void Alignment()
     p->spin();
   }
  
+  //Å·Ê½¾ÛÀàÈ¥´¦ÀíÀëÈºµã£¬±£Áô×î´óµã¼¯£¬±ÜÃâRGB¡ªD¶ÔÆëÎó²î»òÕßMaskRCNNÊ¶±ğÎó²îµ¼ÖÂ·Ö²ãÏÖÏó
+  EuclideanCluster(CloudMask, CloudEuclideanCluster);
+
   //¸ù¾İlabelÌáÈ¡ÎïÌåÄ£ĞÍ
-  //std::string lable = "faceshoulders";
   std::string ModelPath = "/home/model/catkin_ws2/src/pose_estimation/model_pcd/";
-  ModelPath = ModelPath + lable + "_model.pcd";
+  ModelPath = ModelPath + label + "_model.pcd";
+  std::cout << "Object Label : " << label << endl;
   if (pcl::io::loadPCDFile<pcl::PointXYZ> (ModelPath, *CloudModel) == -1) 
   {
-    PCL_ERROR ("Couldn't read file bottle_milktea_model.pcd \n");
+    //PCL_ERROR ("Couldn't read file bottle_milktea_model.pcd \n");
+    std::cout << "Couldn't read file " << ModelPath <<endl;
     return;
   }    
   ROS_INFO("points loaded from Model = %d",  CloudModel->width * CloudModel->height);
@@ -582,18 +561,18 @@ void Alignment()
   }
   {
     pcl::ScopeTime scope_time("*PairAlign");//¼ÆËãËã·¨ÔËĞĞÊ±¼ä
-    pairAlign (CloudMask, CloudPreProcess, CloudTransformedTarget, PairTransformation, true);
+    pairAlign (CloudMask, CloudPreProcess, CloudTransformedTarget, PairAlign_Transformation, true);
     bSaveImage = false;
   }
   std::cout << "The Estimated Rotation and translation matrices are : \n" << std::endl;
   printf("\n");
-  printf("    | %6.3f %6.3f %6.3f | \n", PairTransformation(0, 0), PairTransformation(0, 1), PairTransformation(0, 2));
-  printf("R = | %6.3f %6.3f %6.3f | \n", PairTransformation(1, 0), PairTransformation(1, 1), PairTransformation(1, 2));
-  printf("    | %6.3f %6.3f %6.3f | \n", PairTransformation(2, 0), PairTransformation(2, 1), PairTransformation(2, 2));
+  printf("    | %6.3f %6.3f %6.3f | \n", PairAlign_Transformation(0, 0), PairAlign_Transformation(0, 1), PairAlign_Transformation(0, 2));
+  printf("R = | %6.3f %6.3f %6.3f | \n", PairAlign_Transformation(1, 0), PairAlign_Transformation(1, 1), PairAlign_Transformation(1, 2));
+  printf("    | %6.3f %6.3f %6.3f | \n", PairAlign_Transformation(2, 0), PairAlign_Transformation(2, 1), PairAlign_Transformation(2, 2));
   printf("\n");
-  printf("t = < %0.3f, %0.3f, %0.3f >\n", PairTransformation(0, 3), PairTransformation(1, 3), PairTransformation(2, 3));
+  printf("t = < %0.3f, %0.3f, %0.3f >\n", PairAlign_Transformation(0, 3), PairAlign_Transformation(1, 3), PairAlign_Transformation(2, 3));
 
-  GlobalTransformation = PairTransformation*transformation2;
+  GlobalTransformation = PairAlign_Transformation*MomentOfInertia_Transformation;
   std::cout << "The Global Rotation and translation matrices are : \n" << std::endl;
   printf("\n");
   printf("    | %6.3f %6.3f %6.3f | \n", GlobalTransformation(0, 0), GlobalTransformation(0, 1), GlobalTransformation(0, 2));
@@ -621,9 +600,53 @@ void Alignment()
   std::cout<<thetaz<<endl;
 }
 
+/*
+ * Class Listener use Boost.Bind to pass arbitrary data into a subscription
+ * callback.  For more information on Boost.Bind see the documentation on the boost homepage,
+ * http://www.boost.org/
+ */
+class Listener
+{
+  public:
+  ros::NodeHandle node_handle_;
+  ros::V_Subscriber subs_;    //std::vector<Subscriber>  ÏòÁ¿ÈİÆ÷
+  
+  ros::Subscriber depth_sub_;
+  ros::Subscriber MaskRCNN_sub_;
+  ros::Subscriber RobotControl_sub_;
+  ros::Subscriber Label_sub_;
+
+  Listener(const ros::NodeHandle& node_handle)
+  : node_handle_(node_handle) //Ã°ºÅµÄº¬ÒåÊÇÊ¹ÓÃ²ÎÊınode_handle¶ÔÀàµÄ³ÉÔ±node_handle_½øĞĞ³õÊ¼»¯
+  {
+  }
+
+  void init()  //ListenerÀàµÄinit()·½·¨
+  {
+    // std::vector<Subscriber>.push_back()ÔÚÈİÆ÷Î²²¿¼ÓÈëÒ»¸öSubscriber¶ÔÏó(½Úµã¾ä±úµÄsubscribe·½·¨·µ»ØµÄ) £¬
+    // boost::bind·½·¨½«Ò»¸öº¯Êı×ª»¯³ÉÁíÒ»¸öº¯Êı
+    //subs_.push_back(node_handle_.subscribe<std_msgs::String>("chatter", 1000, boost::bind(&Listener::chatterCallback, this, _1, "User 1")));
+    subs_.push_back(node_handle_.subscribe<sensor_msgs::Image>("mask", 1, boost::bind(&Listener::Mask_Callback, this, _1, node_handle_)));
+    //¶©ÔÄRCÏûÏ¢£¬²É¼¯Í¼Ïñ
+    RobotControl_sub_ = node_handle_.subscribe("RC", 1, CaptureImage_Callback);
+    //¶©ÔÄÉî¶ÈÍ¼
+    depth_sub_ = node_handle_.subscribe("/camera/depth_registered/sw_registered/image_rect", 1 , Depth_Callback);
+    //¶©ÔÄlabel
+    Label_sub_ = node_handle_.subscribe("label", 1, Label_Callback); 
+  }
+  // void chatterCallback(const std_msgs::String::ConstPtr& msg, std::string user_string)  //±»boost::bind()×ª»¯Ö®Ç°µÄÏûÏ¢»Øµ÷º¯Êı
+  // {
+  //   ROS_INFO("I heard: [%s] with user string [%s]", msg->data.c_str(), user_string.c_str());
+  // }
+  void static Depth_Callback(const sensor_msgs::ImageConstPtr& msg);
+  void static Cloud_Callback(const sensor_msgs::PointCloud2& input);
+  void static Label_Callback(const std_msgs::String::ConstPtr& msg);
+  void static CaptureImage_Callback(const std_msgs::Int8::ConstPtr& msg);
+  void Mask_Callback(const sensor_msgs::ImageConstPtr& msg, ros::NodeHandle& node_handle);
+};
 
 //depthÍ¼ÏÔÊ¾µÄ»Øµ÷º¯Êı    
-void depthCb(const sensor_msgs::ImageConstPtr& msg)
+void Listener::Depth_Callback(const sensor_msgs::ImageConstPtr& msg)
 {
   if(true == bSaveImage)
   {
@@ -654,67 +677,35 @@ void depthCb(const sensor_msgs::ImageConstPtr& msg)
   }
 }
 
-/**
- * Class Listener use Boost.Bind to pass arbitrary data into a subscription
- * callback.  For more information on Boost.Bind see the documentation on the boost homepage,
- * http://www.boost.org/
- */
-class Listener
+void Listener::Mask_Callback(const sensor_msgs::ImageConstPtr& msg, ros::NodeHandle& node_handle)
 {
-public:
-  ros::NodeHandle node_handle_;
-  ros::V_Subscriber subs_;    //std::vector<Subscriber>  ÏòÁ¿ÈİÆ÷
- 
-  Listener(const ros::NodeHandle& node_handle)
-  : node_handle_(node_handle) //Ã°ºÅµÄº¬ÒåÊÇÊ¹ÓÃ²ÎÊınode_handle¶ÔÀàµÄ³ÉÔ±node_handle_½øĞĞ³õÊ¼»¯
+  ROS_INFO("Mask Callback");
+  try
   {
+    mask_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::TYPE_8UC1);
   }
- 
-  void init()  //ListenerÀàµÄinit()·½·¨
+  catch (cv_bridge::Exception& e)
   {
-    // std::vector<Subscriber>.push_back()ÔÚÈİÆ÷Î²²¿¼ÓÈëÒ»¸öSubscriber¶ÔÏó(½Úµã¾ä±úµÄsubscribe·½·¨·µ»ØµÄ) £¬
-    // boost::bind·½·¨½«Ò»¸öº¯Êı×ª»¯³ÉÁíÒ»¸öº¯Êı
-    
-    subs_.push_back(node_handle_.subscribe<std_msgs::String>("chatter", 1000, boost::bind(&Listener::chatterCallback, this, _1, "User 1")));
-
-    subs_.push_back(node_handle_.subscribe<sensor_msgs::Image>("mask", 1, boost::bind(&Listener::MaskRCNNCB, this, _1, node_handle_)));
-
-    subs_.push_back(node_handle_.subscribe<std_msgs::String>("chatter", 1000, boost::bind(&Listener::chatterCallback, this, _1, "User 3")));
+    ROS_ERROR("cv_bridge exception: %s", e.what());
+    return;
   }
- 
-  void chatterCallback(const std_msgs::String::ConstPtr& msg, std::string user_string)  //±»boost::bind()×ª»¯Ö®Ç°µÄÏûÏ¢»Øµ÷º¯Êı
+  //ÅĞ¶ÏÉî¶ÈÍ¼ÊÇ·ñÕıÔÚ¸üĞÂ
+  while(bUpdatingImage)//********************ĞèÒªÑéÖ¤ÊÇ·ñ×èÈûÆäËû¶©ÔÄ»áµôÏß³Ì*************************//
   {
-    ROS_INFO("I heard: [%s] with user string [%s]", msg->data.c_str(), user_string.c_str());
+    ros::MultiThreadedSpinner spinner(4); // Use 4 threads
+    spinner.spin(); 
   }
-
-  void MaskRCNNCB(const sensor_msgs::ImageConstPtr& msg, ros::NodeHandle& node_handle)
-  {
-    ROS_INFO("Mask Callback");
-    try
-    {
-      mask_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::TYPE_8UC1);
-    }
-    catch (cv_bridge::Exception& e)
-    {
-      ROS_ERROR("cv_bridge exception: %s", e.what());
-      return;
-    }
-    //ÅĞ¶ÏÉî¶ÈÍ¼ÊÇ·ñÕıÔÚ¸üĞÂ
-    while(bUpdatingImage)//********************ĞèÒªÑéÖ¤ÊÇ·ñ×èÈûÆäËû¶©ÔÄ»áµôÏß³Ì*************************//
-    {
-      ros::MultiThreadedSpinner spinner(4); // Use 4 threads
-      spinner.spin(); 
-    }
-    depth_sub.shutdown();
-    //Éî¶ÈÍ¼ºÍmask¶¼ÒÑ×¼±¸¾ÍĞ÷£¬½øĞĞÆ¥Åä
-    Alignment();
-    depth_sub = node_handle.subscribe("/camera/depth_registered/sw_registered/image_rect", 1 , depthCb);//******ĞèÒªÑéÖ¤ÊÇ·ñÄÜ¹»ÖØĞÂ¶©ÔÄ³É¹¦*******//
-  }
-};
-
+  //¹Ø±ÕÏà»úÉî¶ÈÍ¼¶©ÔÄ£¬1¡¢Ëø¶¨×¼±¸²Ù×÷µÄÉî¶ÈÍ¼£»2¡¢¼õÉÙÅä×¼¹ı³Ì¶©ÔÄÍ¼ÏñµÄ×ÊÔ´ÀûÓÃÂÊ
+  //depth_sub.shutdown();
+  this->depth_sub_.shutdown();
+  //Éî¶ÈÍ¼ºÍmask¶¼ÒÑ×¼±¸¾ÍĞ÷£¬½øĞĞÆ¥Åä
+  Alignment();
+  //»Ø¸´¶©ÔÄÏà»úÉî¶ÈÍ¼
+  this->depth_sub_ = node_handle.subscribe("/camera/depth_registered/sw_registered/image_rect", 1 , Depth_Callback);//******ĞèÒªÑéÖ¤ÊÇ·ñÄÜ¹»ÖØĞÂ¶©ÔÄ³É¹¦*******//
+}
 
 //¶©ÔÄµãÔÆ¼°¿ÉÊÓ»¯
-void cloudCB(const sensor_msgs::PointCloud2& input)
+void Listener::Cloud_Callback(const sensor_msgs::PointCloud2& input)
 {
     pcl::PointCloud<pcl::PointXYZRGB> cloud; // With color
  
@@ -740,7 +731,7 @@ void cloudCB(const sensor_msgs::PointCloud2& input)
 
 
     //¶©ÔÄÏà»ú·¢²¼µãÔÆÊı¾İ
-    // ros::Subscriber pcl_sub = nh.subscribe("/camera/depth_registered/points", 1, cloudCB);
+    // ros::Subscriber pcl_sub = ros_nodehandle.subscribe("/camera/depth_registered/points", 1, Cloud_Callback);
     // ros::Rate rate(20.0);
 
 
@@ -756,15 +747,14 @@ void cloudCB(const sensor_msgs::PointCloud2& input)
     //   }
 }
 
-void Label_Callback(const std_msgs::String::ConstPtr& msg)
+void Listener::Label_Callback(const std_msgs::String::ConstPtr& msg)
 {
   ROS_INFO("Label Callback");
   ROS_INFO("I heard: [%s]", msg->data.c_str());
-  lable =  msg->data.c_str();
+  label =  msg->data.c_str();
 }
 
-
-void RobotControl_Callback(const std_msgs::Int8::ConstPtr& msg)
+void Listener::CaptureImage_Callback(const std_msgs::Int8::ConstPtr& msg)
 {
   ROS_INFO("RobotControl Callback");
   if(1 == msg->data)
@@ -787,34 +777,22 @@ void Pose_Visualer(const ros::TimerEvent& event)
   //-25.0752 0.155353 0.384843 
 }
 
-  
 
 //****************  Ö÷º¯Êı  ************************
 int main (int argc, char** argv)
 {
   // Initialize ROS
   ros::init (argc, argv, "pcl_registration");
-  ros::NodeHandle nh;
-
+  ros::NodeHandle ros_nodehandle;
   // RvizÎïÌå×ËÌ¬¿ÉÊÓ»¯timer
-  ros::Timer timer = nh.createTimer(ros::Duration(0.1), Pose_Visualer);
+  ros::Timer timer = ros_nodehandle.createTimer(ros::Duration(0.1), Pose_Visualer);
+  //ros·¢²¼¶ÔÏó
+  ros::Publisher pcl_pub; 
   sensor_msgs::PointCloud2 output;
-  pcl_pub = nh.advertise<sensor_msgs::PointCloud2> ("pcl_output", 1);//·¢²¼µ½Ö÷Ìâ£¨topic£©
-
-  if(4 == argc)
-  {
-    if(strcmp(argv[1], "-v") == 0)
-    {
-      DEBUG_VISUALIZER = true; 
-      cout << "Visualizer = " << "true" << endl;
-    }
-    else
-      cout << "Visualizer = " << "false" << endl;
-    
-    if(strcmp(argv[2], "-m") == 0)
-      lable = argv[3];
-  }
-  else if(2 == argc)
+  pcl_pub = ros_nodehandle.advertise<sensor_msgs::PointCloud2> ("pcl_output", 1);//·¢²¼µ½Ö÷Ìâ£¨pcl_output£©
+  
+  //ÊäÈë²ÎÊıÅĞ¶Ï£¬¡°-v¡±¿ÉÊÓ»¯Ëã·¨¹ı³Ì
+  if(2 == argc)
   {
     if(strcmp(argv[1], "-v") == 0)
     {
@@ -829,81 +807,16 @@ int main (int argc, char** argv)
     DEBUG_VISUALIZER = false; 
     cout << "Visualizer = " << "false" << endl;
   }
-  
+  //¿ÉÊÓ»¯µ÷ÊÔ¹ı³Ì
   if(true == DEBUG_VISUALIZER)
   {
-    //´´½¨Ò»¸ö PCLVisualizer ¶ÔÏó
-    p = new pcl::visualization::PCLVisualizer (argc, argv, "Pairwise Registration"); //pÊÇÈ«¾Ö±äÁ¿
+    p = new pcl::visualization::PCLVisualizer (argc, argv, "Pairwise Registration"); //´´½¨Ò»¸ö PCLVisualizer ¶ÔÏó£¬pÊÇÈ«¾Ö±äÁ¿
     p->createViewPort (0.0, 0, 0.5, 1.0, vp_1); //´´½¨×óÊÓÇø
     p->createViewPort (0.5, 0, 1.0, 1.0, vp_2); //´´½¨ÓÒÊÓÇø
-    //cv::namedWindow("depth image");
   }
-  //´´½¨µãÔÆÖ¸ÕëºÍ±ä»»¾ØÕó
-  PointCloud::Ptr result (new PointCloud), source, pretarget(new PointCloud), target; //´´½¨3¸öµãÔÆÖ¸Õë£¬·Ö±ğÓÃÓÚ½á¹û£¬Ô´µãÔÆºÍÄ¿±êµãÔÆ
-  Eigen::Matrix4f GlobalTransform = Eigen::Matrix4f::Identity (), pairTransform; 
 
-  //ROSÏÂÓëÆäËû½Úµã¹²Í¬¼¯³É²âÊÔ
-  if(true == DEBUG_WITH_OTHERS)
-  {
-    //¶©ÔÄRCÏûÏ¢£¬²É¼¯Í¼Ïñ
-    RobotControl_sub = nh.subscribe("robotcontrol", 1, RobotControl_Callback);
-    //¶©ÔÄÉî¶ÈÍ¼
-    depth_sub = nh.subscribe("/camera/depth_registered/sw_registered/image_rect", 1 , depthCb); 
-    //¶©ÔÄmask-RCNN·¢²¼ÏûÏ¢
-    //MaskRCNN_sub = nh.subscribe("maskRCNN",1,MaskRCNNCB); 
-    //¶©ÔÄlabel
-    Label_sub = nh.subscribe("label", 1, Label_Callback);
-
-     
-    // Listener l(n);        //´´½¨ListenerÀà
-    // l.init();             //µ÷ÓÃListenerÀàµÄinit£¨£©·½·¨£¬´´½¨3¸ö»°Ìâ¶©ÔÄÕß£¬²¢Ñ¹ÈëÈİÆ÷
+  Listener listener(ros_nodehandle);        //´´½¨ListenerÀà
+  listener.init();                          //µ÷ÓÃListenerÀàµÄinit£¨£©·½·¨£¬´´½¨3¸ö»°Ìâ¶©ÔÄÕß£¬²¢Ñ¹ÈëÈİÆ÷
  
- 
-  }
-  else 
-  {
-    //Ä£¿é¶ÀÁ¢²âÊÔ£¬´ÓÓ²ÅÌ¶ÁÈ¡²âÊÔµãÔÆºÍÄ£ĞÍ£¬
-    //¸ñÊ½Îªdata[0]=²âÊÔµãÔÆ1
-    //data[1]=ÎïÌåÄ£ĞÍ1
-    //data[2]=²âÊÔµãÔÆ2
-    //data[3]=ÎïÌåµãÔÆ2
-    // ¡­¡­
-    std::vector<PCD, Eigen::aligned_allocator<PCD> > data; //Ä£ĞÍ
-    loadData (argc, argv, data); //¶ÁÈ¡pcdÎÄ¼şÊı¾İ£¬¶¨Òå¼ûÉÏÃæ
-    //¼ì²éÓÃ»§Êı¾İ
-    if (data.empty ())
-    {
-      PCL_ERROR ("Syntax is: %s <source.pcd> <target.pcd> [*]", argv[0]); //Óï·¨
-      PCL_ERROR ("[*] - multiple files can be added. The registration results of (i, i+1) will be registered against (i+2), etc"); //¿ÉÒÔÊ¹ÓÃ¶à¸öÎÄ¼ş
-      return (-1);
-    }
-    PCL_INFO ("Loaded %d datasets.", (int)data.size ()); //ÏÔÊ¾¶ÁÈ¡ÁË¶àÉÙ¸öµãÔÆÎÄ¼ş
-      //±éÀúËùÓĞµÄµãÔÆÎÄ¼ş
-    for (size_t i = 1; i < data.size (); ++i, ++i)
-    {
-      source = data[i-1].cloud; //Ô´µãÔÆ
-      target = data[i].cloud; //Ä¿±êµãÔÆ
-      showCloudsLeft(source, target); //ÔÚ×óÊÓÇø£¬¼òµ¥µÄÏÔÊ¾Ô´µãÔÆºÍÄ¿±êµãÔÆ
-      PointCloud::Ptr temp (new PointCloud); //´´½¨ÁÙÊ±µãÔÆÖ¸Õë
-          //ÏÔÊ¾ÕıÔÚÅä×¼µÄµãÔÆÎÄ¼şÃûºÍ¸÷×ÔµÄµãÊı
-      PCL_INFO ("Aligning %s (%d points) with %s (%d points).\n", data[i-1].f_name.c_str (), source->points.size (), data[i].f_name.c_str (), target->points.size ());
-
-      prePairAlign(source, target, pretarget, true);
-      pairAlign (source, target, temp, pairTransform, true);
-      //½«µ±Ç°µÄÒ»¶ÔµãÔÆÊı¾İ£¬±ä»»µ½È«¾Ö±ä»»ÖĞ¡£
-      pcl::transformPointCloud (*temp, *result, GlobalTransform);
-      //¸üĞÂÈ«¾Ö±ä»»
-      GlobalTransform = GlobalTransform * pairTransform;
-    }
-  }
-
-  
-  // ros::Rate r(10); // 10 hz
-  // while (true)
-  // {
-  //   ros::spinOnce();
-  //   r.sleep();
-  // }
   ros::spin ();
 }
-
