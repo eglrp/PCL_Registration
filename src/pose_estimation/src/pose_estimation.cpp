@@ -52,6 +52,7 @@ Description:1、Compute starting translation and rotation based on MomentOfInerti
 
 #include <pcl/segmentation/extract_clusters.h>
 
+
 //pcl类型名简化
 typedef pcl::PointXYZ PointT;
 typedef pcl::PointCloud<PointT> PointCloud;
@@ -426,6 +427,12 @@ void pairAlign (const PointCloud::Ptr cloud_src, const PointCloud::Ptr cloud_tgt
     p->removePointCloud ("prePairAlign source"); //根据给定的ID，从屏幕中去除一个点云。参数是ID
     p->removePointCloud ("prePairAlign target"); //根据给定的ID，从屏幕中去除一个点云。参数是ID
     p->removeAllShapes();
+    
+   
+    p->spin ();
+    p->removePointCloud ("source"); //根据给定的ID，从屏幕中去除一个点云。参数是ID
+    p->removePointCloud ("target");
+    p->removePointCloud ("cloud EuclideanCluster");
   }
 }
 
@@ -437,20 +444,19 @@ void EuclideanCluster(const PointCloud::Ptr cloud_Segmentation, const PointCloud
 	tree->setInputCloud(cloud_Segmentation);
 
 	std::vector<pcl::PointIndices> cluster_indices;
-	pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;   //欧式聚类对象
-	ec.setClusterTolerance(0.02);                     // 设置近邻搜索的搜索半径为2cm
-	ec.setMinClusterSize(100);                 //设置一个聚类需要的最少的点数目为10
-	ec.setMaxClusterSize(1000000);               //设置一个聚类需要的最大点数目为250000
-	ec.setSearchMethod(tree);                    //设置点云的搜索机制
-	ec.setInputCloud(cloud_Segmentation);
-	ec.extract(cluster_indices);           //从点云中提取聚类，并将点云索引保存在cluster_indices中
-										   //迭代访问点云索引cluster_indices,直到分割处所有聚类
+	pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec; //欧式聚类对象
+	ec.setClusterTolerance(0.01);                      //设置近邻搜索的搜索半径为2cm
+	ec.setMinClusterSize(100);                         //设置一个聚类需要的最少的点数目为10
+	ec.setMaxClusterSize(1000000);                     //设置一个聚类需要的最大点数目为250000
+	ec.setSearchMethod(tree);                          //设置点云的搜索机制
+	ec.setInputCloud(cloud_Segmentation);              //输入点云
+	ec.extract(cluster_indices);                       //从点云中提取聚类，并将点云索引保存在cluster_indices中
+  //容器中的点云的索引第一个为物体点云数据
 	std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin();
-	//容器中的点云的索引第一个为物体点云数据
-	//pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+	
 	for (std::vector<int>::const_iterator pit = it->indices.begin(); pit != it->indices.end(); ++pit)
-		//设置保存点云的属性问题
-	cloud_EuclideanCluster->points.push_back(cloud_Segmentation->points[*pit]);
+	  cloud_EuclideanCluster->points.push_back(cloud_Segmentation->points[*pit]);
+	//设置保存点云的属性问题
 	cloud_EuclideanCluster->width = cloud_EuclideanCluster->points.size();
 	cloud_EuclideanCluster->height = 1;
 	cloud_EuclideanCluster->is_dense = true;
@@ -491,36 +497,43 @@ void Alignment()
 {
   //利用深度图和mask分割场景中物体点云 
   pcl::ScopeTime scope_time("**TotalAlignment");//计算算法运行时间
-  for(int ImgWidth = 100; ImgWidth < depth_rows-100; ImgWidth++)
+  for(int ImgWidth = 0; ImgWidth < depth_rows; ImgWidth++)
   {
-    for(int ImgHeight = 200; ImgHeight < depth_cols-200; ImgHeight++ )
+    for(int ImgHeight = 0; ImgHeight < depth_cols; ImgHeight++ )
     {
       //获取深度图中对应点的深度值
       float d = depth_ptr->image.at<float>(ImgWidth,ImgHeight);
-      //判断mask中是否是物体的点
-      if(mask_ptr != 0)
+      //有效范围内的点
+      if((d > 0.4) && (d < 2))
       {
-        unsigned char t = mask_ptr->image.at<unsigned char>(ImgWidth,ImgHeight);
-        if(t == 0)
-        continue;
+		  //判断mask中是否是物体的点
+		  if(mask_ptr != 0)
+		  {
+		    unsigned char t = mask_ptr->image.at<unsigned char>(ImgWidth,ImgHeight);
+		    if(t == 0)
+		    continue;
+		  }
+		  else
+		  {
+		    ROS_INFO("mask image pointer mask_ptr = null");
+		    continue;
+		  }
+		  //计算这个点的空间坐标
+		  pcl::PointXYZ PointWorld;
+		  PointWorld.z = double(d)/camera_factor;
+		  PointWorld.x = (ImgHeight - camera_cx)*PointWorld.z/camera_fx;
+		  PointWorld.y = (ImgWidth - camera_cy)*PointWorld.z/camera_fy;
+		  CloudMask->points.push_back(PointWorld);
       }
-      else
-      {
-        ROS_INFO("mask image pointer mask_ptr = null");
-        continue;
-      }
-      //计算这个点的空间坐标
-      pcl::PointXYZ PointWorld;
-      PointWorld.z = double(d)/camera_factor;
-      PointWorld.x = (ImgHeight - camera_cx)*PointWorld.z/camera_fx;
-      PointWorld.y = (ImgWidth - camera_cy)*PointWorld.z/camera_fy;
-      CloudMask->points.push_back(PointWorld);
     }
   }
   //设置点云属性，采用无序排列方式存储点云
   CloudMask->height = 1;
   CloudMask->width = CloudMask->points.size();
   ROS_INFO("mask cloud size = %d", CloudMask->width);
+  //去除NaN点
+  std::vector<int> nan_indices;
+  pcl::removeNaNFromPointCloud(*CloudMask, *CloudMask, nan_indices);
   CloudMask->is_dense = false;
   if(true == DEBUG_VISUALIZER)
   {
@@ -531,11 +544,19 @@ void Alignment()
   }
  
   //欧式聚类去处理离群点，保留最大点集，避免RGB—D对齐误差或者MaskRCNN识别误差导致分层现象
-  //EuclideanCluster(CloudMask, CloudEuclideanCluster);
+  EuclideanCluster(CloudMask, CloudEuclideanCluster);
+  if(true == DEBUG_VISUALIZER)
+  {
+    p->removePointCloud ("cloud mask");
+    p->addPointCloud<pcl::PointXYZ>(CloudMask, "cloud EuclideanCluster");
+    p->spin();
+  }
+  //清空CloudMask
+  CloudMask->points.clear();
 
   //根据label提取物体模型
-  //std::string ModelPath = "/home/siasun/Desktop/RobGrab/src/pose_estimation/model_pcd/";
-  std::string ModelPath = "/home/model/catkin_ws2/src/pose_estimation/model_pcd/";
+  std::string ModelPath = "/home/siasun/Desktop/RobGrab/src/pose_estimation/model_pcd/";
+  //std::string ModelPath = "/home/model/catkin_ws2/src/pose_estimation/model_pcd/";
   ModelPath = ModelPath + label + "_model.pcd";
   std::cout << "Object Label : " << label << endl;
   if (pcl::io::loadPCDFile<pcl::PointXYZ> (ModelPath, *CloudModel) == -1) 
@@ -548,12 +569,12 @@ void Alignment()
  
   if(true == DEBUG_VISUALIZER)
   {
-    showCloudsLeft(CloudMask, CloudModel); //在左视区，简单的显示源点云和目标点云
+    showCloudsLeft(CloudEuclideanCluster, CloudModel); //在左视区，简单的显示源点云和目标点云
   }     
   //配准物体模型和场景中物体点云
   {
     pcl::ScopeTime scope_time("*PrePairAlign");//计算算法运行时间
-    prePairAlign(CloudMask,CloudModel,CloudPreProcess,true);
+    prePairAlign(CloudEuclideanCluster,CloudModel,CloudPreProcess,true);
   }
   if(true == DEBUG_VISUALIZER)
   {
@@ -562,9 +583,12 @@ void Alignment()
   }
   {
     pcl::ScopeTime scope_time("*PairAlign");//计算算法运行时间
-    pairAlign (CloudMask, CloudPreProcess, CloudTransformedTarget, PairAlign_Transformation, true);
+    pairAlign (CloudEuclideanCluster, CloudPreProcess, CloudTransformedTarget, PairAlign_Transformation, true);
     bSaveImage = false;
   }
+  
+  CloudEuclideanCluster->points.clear();
+  
   std::cout << "The Estimated Rotation and translation matrices are : \n" << std::endl;
   printf("\n");
   printf("    | %6.3f %6.3f %6.3f | \n", PairAlign_Transformation(0, 0), PairAlign_Transformation(0, 1), PairAlign_Transformation(0, 2));
@@ -583,7 +607,7 @@ void Alignment()
   printf("t = < %0.3f, %0.3f, %0.3f >\n", GlobalTransformation(0, 3), GlobalTransformation(1, 3), GlobalTransformation(2, 3));
   if(true == DEBUG_VISUALIZER)
     {
-      PCL_INFO ("Press q to contin.\n");
+      PCL_INFO ("Press q to finish.\n");
       p->spin();
     }
 
