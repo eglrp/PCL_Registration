@@ -73,6 +73,34 @@ pcl::registration::TransformationEstimationSVD<pcl::PointXYZ, pcl::PointXYZ>::Ma
 //PairAlign transformation matrix
 Eigen::Matrix4f  PairAlign_Transformation, GlobalTransformation = Eigen::Matrix4f::Identity(); 
 
+/***********************全局变量****************************/
+pcl::PointCloud<pcl::PointXYZ>::Ptr CloudMask(new pcl::PointCloud<pcl::PointXYZ>);
+pcl::PointCloud<pcl::PointXYZ>::Ptr CloudModel (new pcl::PointCloud<pcl::PointXYZ>);
+pcl::PointCloud<pcl::PointXYZ>::Ptr CloudPreProcess (new pcl::PointCloud<pcl::PointXYZ>);
+pcl::PointCloud<pcl::PointXYZ>::Ptr CloudEuclideanCluster(new pcl::PointCloud<pcl::PointXYZ>);
+pcl::PointCloud<pcl::PointXYZ>::Ptr CloudTransformedTarget(new pcl::PointCloud<pcl::PointXYZ>); 
+
+int depth_cols = 640;
+int depth_rows = 480;
+int camera_factor = 1;
+double camera_cx = 315.153;
+double camera_cy = 253.73;
+double camera_fx = 573.293;
+double camera_fy = 572.41;
+
+double thetax = 0;
+double thetay = 0;
+double thetaz = 0;
+
+Eigen::Vector3d euler_Angle;
+Eigen::Matrix3d Rotation_matrix = Eigen::Matrix3d::Identity();
+
+std::string label = "bottle_milktea";
+bool bUpdatingImage = false;
+bool bSaveImage = false;
+
+sensor_msgs::PointCloud2 PointCloud2TransformedTarget;
+
 //在窗口的左视区，简单的显示源点云和目标点云
 void showCloudsLeft(const PointCloud::Ptr cloud_target, const PointCloud::Ptr cloud_source)
 {
@@ -100,6 +128,27 @@ void showCloudsRight(const PointCloudWithNormals::Ptr cloud_target, const PointC
   p->addPointCloud (cloud_target, tgt_color_handler, "target", vp_2); //加载点云
   p->addPointCloud (cloud_source, src_color_handler, "source", vp_2);
   p->spinOnce();
+}
+
+void udateTF()
+{
+  for(int i = 0; i < 3; i++)
+    for(int j = 0; j < 3; j++)
+    {
+      Rotation_matrix(i, j) = GlobalTransformation(i, j);
+    }
+  euler_Angle = Rotation_matrix.eulerAngles(2, 1, 0);//顺序Z, Y, X
+  thetax = euler_Angle[2];
+  thetay = euler_Angle[1];
+  thetaz = euler_Angle[0];
+  // std::cout<<thetax<<endl;
+  // std::cout<<thetay<<endl;
+  // std::cout<<thetaz<<endl;
+}
+
+void updateBoundingBox()
+{
+
 }
 
 // 定义新的点表达方式< x, y, z, curvature > 坐标+曲率
@@ -230,15 +279,15 @@ void prePairAlign(const PointCloud::Ptr cloud_src,const PointCloud::Ptr cloud_tg
     p->addLine(pt1, pt2, 1.0, 0.0, 0.0, "1 edge");
     p->addLine(pt1, pt4, 1.0, 0.0, 0.0, "2 edge");
     p->addLine(pt1, pt5, 1.0, 0.0, 0.0, "3 edge");
-    p->addLine(pt5, pt6, 1.0, 0.0, 0.0, "4 edge");
-    p->addLine(pt5, pt8, 1.0, 0.0, 0.0, "5 edge");
-    p->addLine(pt2, pt6, 1.0, 0.0, 0.0, "6 edge");
-    p->addLine(pt6, pt7, 1.0, 0.0, 0.0, "7 edge");
-    p->addLine(pt7, pt8, 1.0, 0.0, 0.0, "8 edge");
-    p->addLine(pt2, pt3, 1.0, 0.0, 0.0, "9 edge");
-    p->addLine(pt4, pt8, 1.0, 0.0, 0.0, "10 edge");
-    p->addLine(pt3, pt4, 1.0, 0.0, 0.0, "11 edge");
-    p->addLine(pt3, pt7, 1.0, 0.0, 0.0, "12 edge");
+    p->addLine(pt3, pt2, 1.0, 0.0, 0.0, "4 edge");
+    p->addLine(pt3, pt4, 1.0, 0.0, 0.0, "5 edge");
+    p->addLine(pt3, pt7, 1.0, 0.0, 0.0, "6 edge");
+    p->addLine(pt6, pt2, 1.0, 0.0, 0.0, "7 edge");
+    p->addLine(pt6, pt5, 1.0, 0.0, 0.0, "8 edge");
+    p->addLine(pt6, pt7, 1.0, 0.0, 0.0, "9 edge");
+    p->addLine(pt8, pt4, 1.0, 0.0, 0.0, "10 edge");
+    p->addLine(pt8, pt5, 1.0, 0.0, 0.0, "11 edge");
+    p->addLine(pt8, pt7, 1.0, 0.0, 0.0, "12 edge");
   }
 
 	//************************************计算旋转矩阵***********************************//
@@ -436,67 +485,8 @@ void pairAlign (const PointCloud::Ptr cloud_src, const PointCloud::Ptr cloud_tgt
   }
 }
 
-void EuclideanCluster(const PointCloud::Ptr cloud_Segmentation, const PointCloud::Ptr cloud_EuclideanCluster)
+void segmentation()
 {
-//********************************欧式聚类******************************//
-	//创建用于提取搜索方法的kdtree树对象
-	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
-	tree->setInputCloud(cloud_Segmentation);
-
-	std::vector<pcl::PointIndices> cluster_indices;
-	pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec; //欧式聚类对象
-	ec.setClusterTolerance(0.01);                      //设置近邻搜索的搜索半径为2cm
-	ec.setMinClusterSize(100);                         //设置一个聚类需要的最少的点数目为10
-	ec.setMaxClusterSize(1000000);                     //设置一个聚类需要的最大点数目为250000
-	ec.setSearchMethod(tree);                          //设置点云的搜索机制
-	ec.setInputCloud(cloud_Segmentation);              //输入点云
-	ec.extract(cluster_indices);                       //从点云中提取聚类，并将点云索引保存在cluster_indices中
-  //容器中的点云的索引第一个为物体点云数据
-	std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin();
-	
-	for (std::vector<int>::const_iterator pit = it->indices.begin(); pit != it->indices.end(); ++pit)
-	  cloud_EuclideanCluster->points.push_back(cloud_Segmentation->points[*pit]);
-	//设置保存点云的属性问题
-	cloud_EuclideanCluster->width = cloud_EuclideanCluster->points.size();
-	cloud_EuclideanCluster->height = 1;
-	cloud_EuclideanCluster->is_dense = true;
-	std::cout << "PointCloud representing the Cluster: " << cloud_EuclideanCluster->points.size() << " data points." << std::endl;
-}
-
-/***********************全局变量****************************/
-pcl::PointCloud<pcl::PointXYZ>::Ptr CloudMask(new pcl::PointCloud<pcl::PointXYZ>);
-pcl::PointCloud<pcl::PointXYZ>::Ptr CloudModel (new pcl::PointCloud<pcl::PointXYZ>);
-pcl::PointCloud<pcl::PointXYZ>::Ptr CloudPreProcess (new pcl::PointCloud<pcl::PointXYZ>);
-
-pcl::PointCloud<pcl::PointXYZ>::Ptr CloudEuclideanCluster(new pcl::PointCloud<pcl::PointXYZ>);
-
-PointCloud::Ptr CloudTransformedTarget (new PointCloud); //创建临时点云指针
-int depth_cols = 640;
-int depth_rows = 480;
-int camera_factor = 1;
-double camera_cx = 315.153;
-double camera_cy = 253.73;
-double camera_fx = 573.293;
-double camera_fy = 572.41;
-
-double thetax = 0;
-double thetay = 0;
-double thetaz = 0;
-
-Eigen::Vector3d euler_Angle;
-Eigen::Matrix3d Rotation_matrix = Eigen::Matrix3d::Identity();
-
-std::string label = "bottle_milktea";
-bool bUpdatingImage = false;
-bool bSaveImage = false;
-
-sensor_msgs::PointCloud2 PointCloud2TransformedTarget;
-
-//整合的配准函数
-void Alignment()
-{
-  //利用深度图和mask分割场景中物体点云 
-  pcl::ScopeTime scope_time("**TotalAlignment");//计算算法运行时间
   for(int ImgWidth = 0; ImgWidth < depth_rows; ImgWidth++)
   {
     for(int ImgHeight = 0; ImgHeight < depth_cols; ImgHeight++ )
@@ -542,7 +532,41 @@ void Alignment()
     p->addPointCloud<pcl::PointXYZ>(CloudMask, "cloud mask");
     p->spin();
   }
- 
+}
+
+void EuclideanCluster(const PointCloud::Ptr cloud_Segmentation, const PointCloud::Ptr cloud_EuclideanCluster)
+{
+  //********************************欧式聚类******************************//
+	//创建用于提取搜索方法的kdtree树对象
+	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+	tree->setInputCloud(cloud_Segmentation);
+
+	std::vector<pcl::PointIndices> cluster_indices;
+	pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec; //欧式聚类对象
+	ec.setClusterTolerance(0.01);                      //设置近邻搜索的搜索半径为2cm
+	ec.setMinClusterSize(100);                         //设置一个聚类需要的最少的点数目为10
+	ec.setMaxClusterSize(1000000);                     //设置一个聚类需要的最大点数目为250000
+	ec.setSearchMethod(tree);                          //设置点云的搜索机制
+	ec.setInputCloud(cloud_Segmentation);              //输入点云
+	ec.extract(cluster_indices);                       //从点云中提取聚类，并将点云索引保存在cluster_indices中
+  //容器中的点云的索引第一个为物体点云数据
+	std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin();
+	
+	for (std::vector<int>::const_iterator pit = it->indices.begin(); pit != it->indices.end(); ++pit)
+	  cloud_EuclideanCluster->points.push_back(cloud_Segmentation->points[*pit]);
+	//设置保存点云的属性问题
+	cloud_EuclideanCluster->width = cloud_EuclideanCluster->points.size();
+	cloud_EuclideanCluster->height = 1;
+	cloud_EuclideanCluster->is_dense = true;
+	std::cout << "PointCloud representing the Cluster: " << cloud_EuclideanCluster->points.size() << " data points." << std::endl;
+}
+
+//整合的配准函数
+void Alignment()
+{
+  pcl::ScopeTime scope_time("**TotalAlignment");//计算算法运行时间
+  //利用深度图和mask分割场景中物体点云 
+  segmentation();
   //欧式聚类去处理离群点，保留最大点集，避免RGB—D对齐误差或者MaskRCNN识别误差导致分层现象
   EuclideanCluster(CloudMask, CloudEuclideanCluster);
   if(true == DEBUG_VISUALIZER)
@@ -611,25 +635,19 @@ void Alignment()
       p->spin();
     }
 
-  for(int i = 0; i < 3; i++)
-    for(int j = 0; j < 3; j++)
-    {
-      Rotation_matrix(i, j) = GlobalTransformation(i, j);
-    }
-  euler_Angle = Rotation_matrix.eulerAngles(2, 1, 0);//顺序Z, Y, X
-  thetax = euler_Angle[2];
-  thetay = euler_Angle[1];
-  thetaz = euler_Angle[0];
-  std::cout<<thetax<<endl;
-  std::cout<<thetay<<endl;
-  std::cout<<thetaz<<endl;
+  udateTF();
+  updateBoundingBox();
 }
 
-/*
- * Class Listener use Boost.Bind to pass arbitrary data into a subscription
- * callback.  For more information on Boost.Bind see the documentation on the boost homepage,
- * http://www.boost.org/
- */
+class Publisher
+{
+  public:
+  //ros发布对象
+  ros::Publisher pcl_pub; 
+  sensor_msgs::PointCloud2 output;
+  //pcl_pub = ros_nodehandle.advertise<sensor_msgs::PointCloud2> ("pcl_output", 1);//发布到主题（pcl_output）
+};
+
 class Listener
 {
   public:
@@ -715,9 +733,9 @@ void Listener::Mask_Callback(const sensor_msgs::ImageConstPtr& msg, ros::NodeHan
     return;
   }
   
-  ros::Rate r(10); // 10 hz
+  ros::Rate r(100); //100Hz,即等待10ms 
   //判断深度图是否正在更新
-  while(bUpdatingImage)//********************需要验证是否阻塞其他订阅会掉线程*************************//
+  while(bUpdatingImage)
   {
     ROS_INFO("Waiting for saving depth image");
     ros::spinOnce();
@@ -730,7 +748,7 @@ void Listener::Mask_Callback(const sensor_msgs::ImageConstPtr& msg, ros::NodeHan
   ROS_INFO("Start Alignment");
   Alignment();
   //回复订阅相机深度图
-  this->depth_sub_ = node_handle.subscribe("/camera/depth_registered/sw_registered/image_rect", 1 , Depth_Callback);//******需要验证是否能够重新订阅成功*******//
+  this->depth_sub_ = node_handle.subscribe("/camera/depth_registered/sw_registered/image_rect", 1 , Depth_Callback);
 }
 
 //订阅点云及可视化
@@ -795,7 +813,7 @@ void Listener::CaptureImage_Callback(const std_msgs::Int8::ConstPtr& msg)
   }
 }
 
-void Pose_Visualer(const ros::TimerEvent& event)
+void Timer_PoseVisualization(const ros::TimerEvent& event)
 {
   tf::Transform transform;
   static tf::TransformBroadcaster br;
@@ -806,19 +824,15 @@ void Pose_Visualer(const ros::TimerEvent& event)
   //-25.0752 0.155353 0.384843 
 }
 
-
 //****************  主函数  ************************
 int main (int argc, char** argv)
 {
   // Initialize ROS
-  ros::init (argc, argv, "pcl_registration");
+  ros::init (argc, argv, "pose_estimation");
   ros::NodeHandle ros_nodehandle;
   // Rviz物体姿态可视化timer
-  ros::Timer timer = ros_nodehandle.createTimer(ros::Duration(0.1), Pose_Visualer);
-  //ros发布对象
-  ros::Publisher pcl_pub; 
-  sensor_msgs::PointCloud2 output;
-  pcl_pub = ros_nodehandle.advertise<sensor_msgs::PointCloud2> ("pcl_output", 1);//发布到主题（pcl_output）
+  ros::Timer timer = ros_nodehandle.createTimer(ros::Duration(0.1), Timer_PoseVisualization);
+  
   
   //输入参数判断，“-v”可视化算法过程
   if(2 == argc)
@@ -839,7 +853,7 @@ int main (int argc, char** argv)
   //可视化调试过程
   if(true == DEBUG_VISUALIZER)
   {
-    p = new pcl::visualization::PCLVisualizer (argc, argv, "Pairwise Registration"); //创建一个 PCLVisualizer 对象，p是全局变量
+    p = new pcl::visualization::PCLVisualizer (argc, argv, "3D Registration"); //创建一个 PCLVisualizer 对象，p是全局变量
     p->createViewPort (0.0, 0, 0.5, 1.0, vp_1); //创建左视区
     p->createViewPort (0.5, 0, 1.0, 1.0, vp_2); //创建右视区
   }
