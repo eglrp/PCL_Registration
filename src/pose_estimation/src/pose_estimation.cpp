@@ -224,11 +224,11 @@ void prePairAlign(const PointCloud::Ptr cloud_src,const PointCloud::Ptr cloud_tg
   if(true == DEBUG_VISUALIZER)
   {
     //boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
-    // p->setBackgroundColor(0, 0, 0);
-    p->addCoordinateSystem(0.2);
-    // p->initCameraParameters();
-    p->addPointCloud<pcl::PointXYZ>(cloud_src, "prePairAlign source");
-    p->addPointCloud<pcl::PointXYZ>(cloud_tgt, "prePairAlign target");
+    //p->setBackgroundColor(0, 0, 0);
+    //p->setCameraPose();
+    //p->initCameraParameters();
+    //p->addPointCloud<pcl::PointXYZ>(cloud_src, "prePairAlign source");
+    //p->addPointCloud<pcl::PointXYZ>(cloud_tgt, "prePairAlign target");
     //p->addCube(min_point_AABB.x, max_point_AABB.x, min_point_AABB.y, max_point_AABB.y, min_point_AABB.z, max_point_AABB.z, 1.0, 1.0, 0.0, "AABB");
   }
 
@@ -240,12 +240,12 @@ void prePairAlign(const PointCloud::Ptr cloud_src,const PointCloud::Ptr cloud_tg
 	pcl::PointXYZ x_axis(major_vector(0) + mass_center(0), major_vector(1) + mass_center(1), major_vector(2) + mass_center(2));
 	pcl::PointXYZ y_axis(middle_vector(0) + mass_center(0), middle_vector(1) + mass_center(1), middle_vector(2) + mass_center(2));
 	pcl::PointXYZ z_axis(minor_vector(0) + mass_center(0), minor_vector(1) + mass_center(1), minor_vector(2) + mass_center(2));
-  if(true == DEBUG_VISUALIZER)
-  {
-    p->addLine(center, x_axis, 1.0f, 0.0f, 0.0f, "major eigen vector");
-    p->addLine(center, y_axis, 0.0f, 1.0f, 0.0f, "middle eigen vector");
-    p->addLine(center, z_axis, 0.0f, 0.0f, 1.0f, "minor eigen vector");
-  }
+  //if(true == DEBUG_VISUALIZER)
+  //{
+  //  p->addLine(center, x_axis, 1.0f, 0.0f, 0.0f, "major eigen vector");
+  //  p->addLine(center, y_axis, 0.0f, 1.0f, 0.0f, "middle eigen vector");
+  //  p->addLine(center, z_axis, 0.0f, 0.0f, 1.0f, "minor eigen vector");
+  //}
 
 	Eigen::Vector3f p1(min_point_OBB.x, min_point_OBB.y, min_point_OBB.z);
 	Eigen::Vector3f p2(min_point_OBB.x, min_point_OBB.y, max_point_OBB.z);
@@ -274,21 +274,21 @@ void prePairAlign(const PointCloud::Ptr cloud_src,const PointCloud::Ptr cloud_tg
 	pcl::PointXYZ pt7(p7(0), p7(1), p7(2));
 	pcl::PointXYZ pt8(p8(0), p8(1), p8(2));
 
-  if(true == DEBUG_VISUALIZER)
-  {
-    p->addLine(pt1, pt2, 1.0, 0.0, 0.0, "1 edge");
-    p->addLine(pt1, pt4, 1.0, 0.0, 0.0, "2 edge");
-    p->addLine(pt1, pt5, 1.0, 0.0, 0.0, "3 edge");
-    p->addLine(pt3, pt2, 1.0, 0.0, 0.0, "4 edge");
-    p->addLine(pt3, pt4, 1.0, 0.0, 0.0, "5 edge");
-    p->addLine(pt3, pt7, 1.0, 0.0, 0.0, "6 edge");
-    p->addLine(pt6, pt2, 1.0, 0.0, 0.0, "7 edge");
-    p->addLine(pt6, pt5, 1.0, 0.0, 0.0, "8 edge");
-    p->addLine(pt6, pt7, 1.0, 0.0, 0.0, "9 edge");
-    p->addLine(pt8, pt4, 1.0, 0.0, 0.0, "10 edge");
-    p->addLine(pt8, pt5, 1.0, 0.0, 0.0, "11 edge");
-    p->addLine(pt8, pt7, 1.0, 0.0, 0.0, "12 edge");
-  }
+  //if(true == DEBUG_VISUALIZER)
+  //{
+  //  p->addLine(pt1, pt2, 1.0, 0.0, 0.0, "1 edge");
+  //  p->addLine(pt1, pt4, 1.0, 0.0, 0.0, "2 edge");
+  //  p->addLine(pt1, pt5, 1.0, 0.0, 0.0, "3 edge");
+  //  p->addLine(pt3, pt2, 1.0, 0.0, 0.0, "4 edge");
+  //  p->addLine(pt3, pt4, 1.0, 0.0, 0.0, "5 edge");
+  //  p->addLine(pt3, pt7, 1.0, 0.0, 0.0, "6 edge");
+  //  p->addLine(pt6, pt2, 1.0, 0.0, 0.0, "7 edge");
+  //  p->addLine(pt6, pt5, 1.0, 0.0, 0.0, "8 edge");
+  //  p->addLine(pt6, pt7, 1.0, 0.0, 0.0, "9 edge");
+  //  p->addLine(pt8, pt4, 1.0, 0.0, 0.0, "10 edge");
+  //  p->addLine(pt8, pt5, 1.0, 0.0, 0.0, "11 edge");
+  //  p->addLine(pt8, pt7, 1.0, 0.0, 0.0, "12 edge");
+  //}
 
 	//************************************计算旋转矩阵***********************************//
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in(new pcl::PointCloud<pcl::PointXYZ>());
@@ -356,10 +356,10 @@ void prePairAlign(const PointCloud::Ptr cloud_src,const PointCloud::Ptr cloud_tg
 	//You can either apply transform_1 or transform_2; they are the same
   //pcl::transformPointCloud(*cloud_src, *transformed_cloud, MomentOfInertia_Transformation);
   pcl::transformPointCloud(*cloud_tgt, *transformed_cloud, MomentOfInertia_Transformation);
-   if(true == DEBUG_VISUALIZER)
-  {
-    p->addPointCloud<pcl::PointXYZ>(transformed_cloud, "prePairAlign cloud");
-  }
+  // if(true == DEBUG_VISUALIZER)
+  //{
+  //  p->addPointCloud<pcl::PointXYZ>(transformed_cloud, "prePairAlign cloud");
+  //}
   //pcl::io::savePCDFileASCII("transformed_cloud.pcd", *transformed_cloud);	
 }
 
@@ -470,18 +470,18 @@ void pairAlign (const PointCloud::Ptr cloud_src, const PointCloud::Ptr cloud_tgt
     p->addPointCloud (output, cloud_tgt_h, "target", vp_2); //添加点云数据，下同
     p->addPointCloud (cloud_src, cloud_src_h, "source", vp_2);
 
-    PCL_INFO ("Press q to continue the registration.\n");
+    PCL_INFO ("Press q to clear the screen.\n");
     p->spin ();
 
     p->removePointCloud ("prePairAlign source"); //根据给定的ID，从屏幕中去除一个点云。参数是ID
     p->removePointCloud ("prePairAlign target"); //根据给定的ID，从屏幕中去除一个点云。参数是ID
     p->removeAllShapes();
     
-   
-    p->spin ();
     p->removePointCloud ("source"); //根据给定的ID，从屏幕中去除一个点云。参数是ID
     p->removePointCloud ("target");
-    p->removePointCloud ("cloud EuclideanCluster");
+    p->removePointCloud ("cloud_mask");
+    p->removePointCloud ("vp1_target"); //根据给定的ID，从屏幕中去除一个点云。参数是ID
+    p->removePointCloud ("vp1_source");
   }
 }
 
@@ -529,8 +529,10 @@ void segmentation()
   {
     p->removePointCloud ("target"); 
     p->removePointCloud ("source");
-    p->addPointCloud<pcl::PointXYZ>(CloudMask, "cloud mask");
-    p->spin();
+    pcl::visualization::PointCloudColorHandlerCustom<PointT> Mask_h (CloudMask, 255, 255, 255);
+    p->addPointCloud (CloudMask, Mask_h, "cloud_mask", vp_1);
+    //p->addPointCloud<pcl::PointXYZ>(CloudMask, "cloud mask");
+    //p->spin();
   }
 }
 
@@ -571,9 +573,10 @@ void Alignment()
   EuclideanCluster(CloudMask, CloudEuclideanCluster);
   if(true == DEBUG_VISUALIZER)
   {
-    p->removePointCloud ("cloud mask");
-    p->addPointCloud<pcl::PointXYZ>(CloudMask, "cloud EuclideanCluster");
-    p->spin();
+    p->addCoordinateSystem(0.2);
+    //p->removePointCloud ("cloud mask");
+    //p->addPointCloud<pcl::PointXYZ>(CloudEuclideanCluster, "cloud EuclideanCluster");
+    //p->spin();
   }
   //清空CloudMask
   CloudMask->points.clear();
@@ -593,17 +596,13 @@ void Alignment()
  
   if(true == DEBUG_VISUALIZER)
   {
-    showCloudsLeft(CloudEuclideanCluster, CloudModel); //在左视区，简单的显示源点云和目标点云
+    showCloudsLeft(CloudModel, CloudEuclideanCluster); //在左视区，显示源点云和目标点云
+    //showCloudsRight(CloudEuclideanCluster, CloudModel);//在右视区，显示源点云和目标点云
   }     
   //配准物体模型和场景中物体点云
   {
     pcl::ScopeTime scope_time("*PrePairAlign");//计算算法运行时间
     prePairAlign(CloudEuclideanCluster,CloudModel,CloudPreProcess,true);
-  }
-  if(true == DEBUG_VISUALIZER)
-  {
-    PCL_INFO ("Press q to continue.\n");
-    p->spin();
   }
   {
     pcl::ScopeTime scope_time("*PairAlign");//计算算法运行时间
@@ -854,6 +853,8 @@ int main (int argc, char** argv)
   if(true == DEBUG_VISUALIZER)
   {
     p = new pcl::visualization::PCLVisualizer (argc, argv, "3D Registration"); //创建一个 PCLVisualizer 对象，p是全局变量
+    p->addCoordinateSystem(0.2);
+    p->setCameraPosition(0.4, 0.0, -1.0, 0, -1, 0);
     p->createViewPort (0.0, 0, 0.5, 1.0, vp_1); //创建左视区
     p->createViewPort (0.5, 0, 1.0, 1.0, vp_2); //创建右视区
   }
